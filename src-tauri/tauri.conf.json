@@ -10,6 +10,7 @@
     "beforeBuildCommand": "npm run build"
   },
   "app": {
+    "enableGTKAppId": true,
     "windows": [
       {
         "title": "RunAlyzer",
@@ -28,6 +29,11 @@
     "targets": [
       "deb"
     ],
+    "linux": {
+      "deb": {
+        "desktopTemplate": "desktop-template.desktop"
+      }
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
