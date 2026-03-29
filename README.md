@@ -19,3 +19,18 @@ Aplicacion web para analizar sesiones de entrenamiento importadas desde archivos
 ## Build
 
 `npm run build`
+
+## Desktop Deb
+
+La rama `tauri-deb` anade empaquetado con Tauri para generar un instalador `.deb` de Ubuntu.
+
+Comandos locales:
+
+- `npm run tauri dev`
+- `npm run tauri build`
+
+GitHub Actions:
+
+- el workflow [`.github/workflows/build-deb.yml`](/home/imanowl/runalyzerGitHub/.github/workflows/build-deb.yml) genera el `.deb`
+- se puede lanzar manualmente con `workflow_dispatch`
+- al crear un tag `v*` sube el `.deb` a GitHub Releases
