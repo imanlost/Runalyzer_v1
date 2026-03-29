@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RunAlyzer Pro</title>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+     crossorigin=""></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        /* Apple-like dark scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #3a3a3c; 
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #57575a; 
+        }
+
+        /* Map Dark Mode Overrides */
+        .leaflet-container {
+            background: #000000 !important;
+            font-family: system-ui, -apple-system, sans-serif !important;
+        }
+        .leaflet-control-zoom a {
+            background-color: rgba(28, 28, 30, 0.8) !important;
+            color: white !important;
+            border: 1px solid rgba(255,255,255,0.1) !important;
+            backdrop-filter: blur(10px);
+        }
+
+        /* iOS Style Range Slider */
+        input[type=range] {
+            -webkit-appearance: none; 
+            background: transparent; 
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 20px;
+            width: 20px;
+            border-radius: 50%;
+            background: #ffffff;
+            cursor: pointer;
+            margin-top: -8px; 
+            box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: #3a3a3c;
+            border-radius: 2px;
+        }
+        input[type=range]:focus {
+            outline: none;
+        }
+        
+        /* Glassmorphism Utilities */
+        .glass-panel {
+            background: rgba(28, 28, 30, 0.65);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .glass-sidebar {
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+        }
+    </style>
+  <script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "leaflet": "https://esm.sh/leaflet@^1.9.4",
+    "jszip": "https://esm.sh/jszip@3.10.1",
+    "fit-file-parser": "https://esm.sh/fit-file-parser@1.9.5?bundle",
+    "buffer": "https://esm.sh/buffer@6.0.3",
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "react-dom": "https://esm.sh/react-dom@^19.2.3",
+    "leaflet/": "https://esm.sh/leaflet@^1.9.4/"
+  }
+}
+</script>
+</head>
+  <body class="bg-black text-white h-screen overflow-hidden antialiased font-sans selection:bg-gray-700 selection:text-white">
+    <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
+  </body>
+</html>
