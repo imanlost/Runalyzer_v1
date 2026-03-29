@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="runnerGradient" x1="92" y1="80" x2="412" y2="420" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#23f0ff"/>
+      <stop offset="28%" stop-color="#2d8fff"/>
+      <stop offset="56%" stop-color="#ff3ec9"/>
+      <stop offset="100%" stop-color="#ffb347"/>
+    </linearGradient>
+    <filter id="neonGlow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="96" fill="#07070b"/>
+  <circle cx="256" cy="256" r="210" fill="none" stroke="#11111b" stroke-width="2"/>
+
+  <g fill="none" stroke="url(#runnerGradient)" stroke-linecap="round" stroke-linejoin="round">
+    <g filter="url(#neonGlow)" opacity="0.9">
+      <path d="M317 86
+               C334 73 365 78 379 97
+               C388 109 389 136 381 148
+               L381 160
+               C366 165 357 179 356 194
+               L360 223
+               L388 257
+               C394 265 393 281 385 288
+               L350 321
+               C343 328 331 329 323 324
+               L275 285
+               L248 296
+               L254 332
+               L308 351
+               C322 356 328 372 323 386
+               L290 463
+               C286 472 277 478 267 477
+               L234 446
+               C226 439 225 426 230 417
+               L259 353
+               L194 333
+               L121 388
+               C112 395 100 394 92 387
+               L86 343
+               C88 333 93 326 102 323
+               L171 295
+               L206 231
+               L174 166
+               C170 156 173 144 181 137
+               L229 98
+               C237 92 247 88 257 89
+               L317 86Z"
+            stroke-width="11"/>
+      <path d="M258 90 L320 122 L258 155 L198 162" stroke-width="7"/>
+      <path d="M258 155 L286 223 L249 296" stroke-width="7"/>
+      <path d="M286 223 L356 194" stroke-width="7"/>
+      <path d="M275 285 L206 231" stroke-width="7"/>
+      <path d="M194 333 L171 295 L121 388" stroke-width="7"/>
+      <path d="M259 353 L234 446" stroke-width="7"/>
+      <path d="M308 351 L267 477" stroke-width="7"/>
+    </g>
+
+    <g opacity="1">
+      <path d="M317 86
+               C334 73 365 78 379 97
+               C388 109 389 136 381 148
+               L381 160
+               C366 165 357 179 356 194
+               L360 223
+               L388 257
+               C394 265 393 281 385 288
+               L350 321
+               C343 328 331 329 323 324
+               L275 285
+               L248 296
+               L254 332
+               L308 351
+               C322 356 328 372 323 386
+               L290 463
+               C286 472 277 478 267 477
+               L234 446
+               C226 439 225 426 230 417
+               L259 353
+               L194 333
+               L121 388
+               C112 395 100 394 92 387
+               L86 343
+               C88 333 93 326 102 323
+               L171 295
+               L206 231
+               L174 166
+               C170 156 173 144 181 137
+               L229 98
+               C237 92 247 88 257 89
+               L317 86Z"
+            stroke-width="7"/>
+      <path d="M258 90 L320 122 L258 155 L198 162" stroke-width="4.5"/>
+      <path d="M258 155 L286 223 L249 296" stroke-width="4.5"/>
+      <path d="M286 223 L356 194" stroke-width="4.5"/>
+      <path d="M275 285 L206 231" stroke-width="4.5"/>
+      <path d="M194 333 L171 295 L121 388" stroke-width="4.5"/>
+      <path d="M259 353 L234 446" stroke-width="4.5"/>
+      <path d="M308 351 L267 477" stroke-width="4.5"/>
+    </g>
+  </g>
+</svg>
