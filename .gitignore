@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Tauri icon artifacts not used by this Debian-only pipeline
+src-tauri/icons/64x64.png
+src-tauri/icons/android/
+src-tauri/icons/ios/

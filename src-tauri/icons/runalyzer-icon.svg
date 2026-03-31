@@ -15,10 +15,10 @@
     </filter>
   </defs>
 
-  <rect width="512" height="512" rx="96" fill="#07070b"/>
-  <circle cx="256" cy="256" r="210" fill="none" stroke="#11111b" stroke-width="2"/>
+  <rect width="512" height="512" rx="104" fill="#05060a"/>
+  <circle cx="256" cy="256" r="214" fill="none" stroke="#11131a" stroke-width="2"/>
 
-  <g fill="none" stroke="url(#runnerGradient)" stroke-linecap="round" stroke-linejoin="round">
+  <g fill="none" stroke="url(#runnerGradient)" stroke-linecap="round" stroke-linejoin="round" transform="translate(-18 -10) scale(1.08)">
     <g filter="url(#neonGlow)" opacity="0.9">
       <path d="M317 86
                C334 73 365 78 379 97
@@ -52,14 +52,14 @@
                L229 98
                C237 92 247 88 257 89
                L317 86Z"
-            stroke-width="11"/>
-      <path d="M258 90 L320 122 L258 155 L198 162" stroke-width="7"/>
-      <path d="M258 155 L286 223 L249 296" stroke-width="7"/>
-      <path d="M286 223 L356 194" stroke-width="7"/>
-      <path d="M275 285 L206 231" stroke-width="7"/>
-      <path d="M194 333 L171 295 L121 388" stroke-width="7"/>
-      <path d="M259 353 L234 446" stroke-width="7"/>
-      <path d="M308 351 L267 477" stroke-width="7"/>
+            stroke-width="13"/>
+      <path d="M258 90 L320 122 L258 155 L198 162" stroke-width="8"/>
+      <path d="M258 155 L286 223 L249 296" stroke-width="8"/>
+      <path d="M286 223 L356 194" stroke-width="8"/>
+      <path d="M275 285 L206 231" stroke-width="8"/>
+      <path d="M194 333 L171 295 L121 388" stroke-width="8"/>
+      <path d="M259 353 L234 446" stroke-width="8"/>
+      <path d="M308 351 L267 477" stroke-width="8"/>
     </g>
 
     <g opacity="1">
@@ -95,14 +95,14 @@
                L229 98
                C237 92 247 88 257 89
                L317 86Z"
-            stroke-width="7"/>
-      <path d="M258 90 L320 122 L258 155 L198 162" stroke-width="4.5"/>
-      <path d="M258 155 L286 223 L249 296" stroke-width="4.5"/>
-      <path d="M286 223 L356 194" stroke-width="4.5"/>
-      <path d="M275 285 L206 231" stroke-width="4.5"/>
-      <path d="M194 333 L171 295 L121 388" stroke-width="4.5"/>
-      <path d="M259 353 L234 446" stroke-width="4.5"/>
-      <path d="M308 351 L267 477" stroke-width="4.5"/>
+            stroke-width="8"/>
+      <path d="M258 90 L320 122 L258 155 L198 162" stroke-width="5.5"/>
+      <path d="M258 155 L286 223 L249 296" stroke-width="5.5"/>
+      <path d="M286 223 L356 194" stroke-width="5.5"/>
+      <path d="M275 285 L206 231" stroke-width="5.5"/>
+      <path d="M194 333 L171 295 L121 388" stroke-width="5.5"/>
+      <path d="M259 353 L234 446" stroke-width="5.5"/>
+      <path d="M308 351 L267 477" stroke-width="5.5"/>
     </g>
   </g>
 </svg>
