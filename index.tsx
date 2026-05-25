@@ -1964,7 +1964,7 @@ const App = () => {
 
         try {
             const authHeader = 'Basic ' + btoa(intervalsConfig.athleteId + ':' + intervalsConfig.apiKey);
-            const res = await fetch(`https://intervals.icu/api/v1/athlete/${intervalsConfig.athleteId}/activities`, { headers: { 'Authorization': authHeader } });
+            const res = await fetch(`https://intervals.icu/api/v1/athlete/${intervalsConfig.athleteId}/activities?oldest=0`, { headers: { 'Authorization': authHeader } });
             if (!res.ok) throw new Error(`Status HTTP: ${res.status}`);
             
             const activities = await res.json();
