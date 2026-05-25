@@ -42,7 +42,8 @@ export const Icons = {
     SquareCheck: () => <i className="fa-solid fa-square-check text-[#34C759]"></i>,
     Battery: () => <i className="fa-solid fa-battery-half text-green-400"></i>,
     Medal: () => <i className="fa-solid fa-medal text-yellow-300"></i>,
-    Brain: () => <i className="fa-solid fa-brain text-pink-400"></i>
+    Brain: () => <i className="fa-solid fa-brain text-pink-400"></i>,
+    Refresh: () => <i className="fa-solid fa-arrows-rotate text-[#007AFF]"></i>
 };
 
 export const getSportConfig = (sport: string) => {

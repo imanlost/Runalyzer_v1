@@ -6,6 +6,8 @@ export interface UserProfile {
     gender: 'male' | 'female';
     restHr: number;
     maxHr: number;
+    intervalsApiKey?: string;
+    intervalsAthleteId?: string;
     // Zonas personalizadas: guarda el límite SUPERIOR de cada zona
     customZones?: {
         z1: number; // Final de Z1

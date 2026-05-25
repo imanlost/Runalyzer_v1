@@ -298,6 +298,15 @@ export const ProfileModal = ({ isOpen, onClose, profile, onSave }: any) => {
                             <div className="flex justify-between py-0.5"><span className="text-red-400">Z5</span><span>&gt; {z4Lim}</span><span className="text-red-500">VO2 Max</span></div>
                         </div>
                     </div>
+                    <div className="pt-4 border-t border-white/10">
+                         <div className="flex justify-between items-center mb-3">
+                             <h4 className="text-sm font-semibold text-[#007AFF]">Integración Intervals.icu</h4>
+                         </div>
+                         <div className="grid grid-cols-1 gap-2 mb-4">
+                             <div><label className="text-xs text-gray-500 uppercase font-bold block mb-1">Athlete ID</label><input type="text" value={localProfile.intervalsAthleteId || ''} onChange={e => handleChange('intervalsAthleteId', e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white outline-none focus:border-[#007AFF]" placeholder="Ej: i12345" /></div>
+                             <div><label className="text-xs text-gray-500 uppercase font-bold block mb-1">API Key</label><input type="password" value={localProfile.intervalsApiKey || ''} onChange={e => handleChange('intervalsApiKey', e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-lg p-2 text-white outline-none focus:border-[#007AFF]" placeholder="Tu API Key" /></div>
+                         </div>
+                    </div>
                     <button onClick={handleSave} className="w-full bg-[#007AFF] hover:bg-blue-600 text-white font-bold py-3 rounded-xl mt-4 transition-colors">Guardar Perfil</button>
                 </div>
             </div>
