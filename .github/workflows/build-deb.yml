@@ -33,8 +33,27 @@ jobs:
       - name: Install Dependencies
         run: npm ci
 
-      - name: Build Deb
+      - name: Build Frontend (Vite)
+        run: npm run build
+
+      - name: Verify Frontend
+        run: |
+          ls -la dist/
+          echo "--- Checking for intervals code ---"
+          grep -c "intervals.icu" dist/assets/*.js || echo "INTERVALS CODE NOT FOUND IN JS BUNDLE!"
+          grep -c "API_KEY" dist/assets/*.js || echo "API_KEY NOT FOUND!"
+          grep -c "oldest=0" dist/assets/*.js || echo "oldest=0 NOT FOUND!"
+
+      - name: Build Deb (Tauri)
         run: npm run tauri build
+
+      - name: Verify Binary
+        run: |
+          echo "--- Checking binary for intervals code ---"
+          grep -c "intervals.icu" src-tauri/target/release/bundle/deb/*.deb 2>/dev/null || echo "Not in .deb (expected - it's compressed)"
+          strings src-tauri/target/release/runalyzer | grep -c "intervals.icu" || echo "INTERVALS NOT IN BINARY!"
+          strings src-tauri/target/release/runalyzer | grep -c "API_KEY" || echo "API_KEY NOT IN BINARY!"
+          strings src-tauri/target/release/runalyzer | grep -c "oldest=0" || echo "oldest=0 NOT IN BINARY!"
 
       - name: Upload Deb Artifact
         uses: actions/upload-artifact@v4
