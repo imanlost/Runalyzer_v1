@@ -47,4 +47,4 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: src-tauri/target/release/bundle/deb/*.deb
-          overwrite: true
+          overwrite_files: true
