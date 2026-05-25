@@ -47,7 +47,7 @@ export const fetchIntervalsActivityStreams = async (activityId: string, apiKey: 
 
 export const importFromIntervals = async (athleteId: string, apiKey: string, onProgress: (msg: string) => void): Promise<Session[]> => {
     onProgress("Obteniendo lista de actividades desde Intervals.icu...");
-    const activities = await fetchIntervalsActivities(athleteId, apiKey, '0');
+    const activities = await fetchIntervalsActivities(athleteId, apiKey, '2010-01-01');
     const sessions: Session[] = [];
 
     // Filter to limit amount? Let's process the last 10 for safety if it's too many, or just take first 20.
