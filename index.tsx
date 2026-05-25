@@ -1963,7 +1963,7 @@ const App = () => {
         addNotification({ type: 'info', message: 'Conectando con Intervals... Buscando actividades.' });
 
         try {
-            const authHeader = 'Basic ' + btoa(intervalsConfig.athleteId + ':' + intervalsConfig.apiKey);
+            const authHeader = 'Basic ' + btoa('API_KEY:' + intervalsConfig.apiKey);
             const res = await fetch(`https://intervals.icu/api/v1/athlete/${intervalsConfig.athleteId}/activities?oldest=0`, { headers: { 'Authorization': authHeader } });
             if (!res.ok) throw new Error(`Status HTTP: ${res.status}`);
             
