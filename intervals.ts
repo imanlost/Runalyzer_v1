@@ -67,7 +67,9 @@ export const importFromIntervals = async (athleteId: string, apiKey: string, onP
             const timeStream = streams.find((s: any) => s.type === 'time')?.data || [];
             if (timeStream.length === 0) continue; // Skip activities without streams
 
-            const latlngStream = streams.find((s: any) => s.type === 'latlng')?.data || [];
+            const latlngStreamObj = streams.find((s: any) => s.type === 'latlng');
+            const latStream = latlngStreamObj?.data || [];
+            const lonStream = latlngStreamObj?.data2 || [];
             const hrStream = streams.find((s: any) => s.type === 'heartrate')?.data || [];
             const speedStream = streams.find((s: any) => s.type === 'velocity_smooth')?.data || []; // m/s
             const altStream = streams.find((s: any) => s.type === 'altitude')?.data || [];
@@ -79,8 +81,8 @@ export const importFromIntervals = async (athleteId: string, apiKey: string, onP
             for (let i = 0; i < timeStream.length; i++) {
                 const tp: TrackPoint = {
                     timestamp: startTimeTimestamp + timeStream[i] * 1000,
-                    lat: latlngStream[i] ? latlngStream[i][0] : 0,
-                    lon: latlngStream[i] ? latlngStream[i][1] : 0,
+                    lat: latStream[i] || 0,
+                    lon: lonStream[i] || 0,
                     hr: hrStream[i] || 0,
                     speed: speedStream[i] || 0,
                     altitude: altStream[i] || 0,
@@ -130,8 +132,8 @@ export const importFromIntervals = async (athleteId: string, apiKey: string, onP
             };
 
             // Calculate extra metrics
-            session.acsmVo2Max = calculateACSMVo2(session.distance / session.duration);
-            session.trimp = session.trimp || calculateTRIMP(session.duration/60, session.avgHr || 120, 60, 190, 'male');
+            session.acsmVo2Max = calculateACSMVo2(trackPoints, maxHr || 190, 60);
+            session.trimp = session.trimp || calculateTRIMP(trackPoints, maxHr || 190, 60);
             session.climbScore = calculateClimbScore(session.totalElevationGain, session.distance);
 
             sessions.push(session);
