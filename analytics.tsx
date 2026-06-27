@@ -565,13 +565,13 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
                      const name = s.name || 'Sin nombre';
                      const date = new Date(s.startTime).toLocaleDateString('es-ES');
                      poly.bindPopup(`
-                         <div style="font-family:system-ui;color:white;min-width:180px">
-                             <b>${name}</b><br/>
-                             📅 ${date}<br/>
-                             📏 ${distKm} km | ⛰ ${elevM} m D+<br/>
-                             ${s.weather ? `🌡 ${s.weather.temperature}°C | ${s.weather.weatherDescription}` : ''}
+                         <div style="font-family:system-ui;color:#e0e0e0;min-width:180px;background:#1a1a2e;padding:12px;border-radius:8px;border:1px solid #2a2a4a">
+                             <b style="color:#34C759">${name}</b><br/>
+                             <span style="font-size:11px;color:#888">📅 ${date}</span><br/>
+                             <span style="font-size:13px">📏 ${distKm} km | ⛰ ${elevM} m D+</span><br/>
+                             ${s.weather ? `<span style="font-size:12px;color:#4fc3f7">🌡 ${s.weather.temperature}°C | ${s.weather.weatherDescription}</span>` : ''}
                          </div>
-                     `).openPopup();
+                     `, { className: 'dark-popup' }).openPopup();
                  });
                  
                  if (!isFiltered || !effectiveFilter) {
@@ -622,7 +622,7 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
             
             {/* Panel de filtros */}
             {showFilters && (
-            <div className="absolute top-16 right-4 bg-[#1C1C1E]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-5 w-72 shadow-2xl z-10">
+            <div className="absolute top-16 right-4 bg-[#1C1C1E] border border-white/15 rounded-2xl p-5 w-72 shadow-2xl z-10" style={{boxShadow: '0 0 40px rgba(0,0,0,0.8)'}}>
                 <div className="flex justify-between items-center mb-4">
                     <h4 className="text-sm font-bold text-white">Filtrar Rutas</h4>
                     <button onClick={() => { setShowFilters(false); setActiveFilter(false); }} className="text-gray-500 hover:text-white text-lg">&times;</button>

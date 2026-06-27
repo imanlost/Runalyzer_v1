@@ -1,0 +1,21 @@
+/* Leaflet dark popup overrides */
+.leaflet-popup-content-wrapper {
+    background: #1a1a2e !important;
+    color: #e0e0e0 !important;
+    border-radius: 8px !important;
+    border: 1px solid #2a2a4a !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.6) !important;
+}
+.leaflet-popup-tip {
+    background: #1a1a2e !important;
+}
+.leaflet-popup-content {
+    margin: 0 !important;
+    line-height: 1.5 !important;
+}
+.leaflet-popup-close-button {
+    color: #888 !important;
+}
+.leaflet-popup-close-button:hover {
+    color: #fff !important;
+}

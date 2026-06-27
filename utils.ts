@@ -364,7 +364,7 @@ export const fetchWeatherForSession = async (lat: number, lon: number, startTime
         const startDate = startTime.substring(0, 10);
         const endDate = endTime.substring(0, 10);
         
-        const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${startDate}&end_date=${endDate}&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,wind_direction_10m,precipitation,weather_code&timezone=auto`;
+        const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${startDate}&end_date=${endDate}&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,wind_direction_10m,precipitation,weather_code&timezone=Europe%2FMadrid`;
         
         const resp = await fetch(url);
         if (!resp.ok) return null;
