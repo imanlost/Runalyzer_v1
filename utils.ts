@@ -1,5 +1,5 @@
 
-import { TrackPoint, Session, SessionSummary, AcwrResult } from './types';
+import { TrackPoint, Session, SessionSummary, AcwrResult, WeatherData } from './types';
 
 export const formatPace = (minPerKm: number) => {
     if (!isFinite(minPerKm) || isNaN(minPerKm) || minPerKm <= 0) return '--';
@@ -343,4 +343,80 @@ export const generateMockHistory = (): Session[] => {
     });
   }
   return sessions.sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
+};
+
+// --- METEOROLOGÍA ---
+
+const WMO_CODES: Record<number, string> = {
+    0: 'Despejado', 1: 'Mayormente despejado', 2: 'Parcialmente nublado', 3: 'Nublado',
+    45: 'Niebla', 48: 'Niebla con escarcha',
+    51: 'Llovizna ligera', 53: 'Llovizna moderada', 55: 'Llovizna densa',
+    61: 'Lluvia ligera', 63: 'Lluvia moderada', 65: 'Lluvia fuerte',
+    71: 'Nieve ligera', 73: 'Nieve moderada', 75: 'Nieve fuerte',
+    80: 'Chubascos ligeros', 81: 'Chubascos moderados', 82: 'Chubascos violentos',
+    95: 'Tormenta', 96: 'Tormenta con granizo ligero', 99: 'Tormenta con granizo fuerte'
+};
+
+const WIND_DIRECTIONS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSO', 'SO', 'OSO', 'O', 'ONO', 'NO', 'NNO'];
+
+export const fetchWeatherForSession = async (lat: number, lon: number, startTime: string, endTime: string): Promise<WeatherData | null> => {
+    try {
+        const startDate = startTime.substring(0, 10);
+        const endDate = endTime.substring(0, 10);
+        
+        const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${startDate}&end_date=${endDate}&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,wind_direction_10m,precipitation,weather_code&timezone=auto`;
+        
+        const resp = await fetch(url);
+        if (!resp.ok) return null;
+        
+        const data = await resp.json();
+        const hourly = data.hourly;
+        if (!hourly || !hourly.time) return null;
+        
+        // Encontrar las horas que caen dentro de la actividad
+        const activityStart = new Date(startTime);
+        const activityEnd = new Date(endTime);
+        
+        let sumTemp = 0, sumFeels = 0, sumHum = 0, sumWind = 0, sumWindDir = 0, sumPrecip = 0;
+        let lastCode = 0;
+        let count = 0;
+        
+        for (let i = 0; i < hourly.time.length; i++) {
+            const hTime = new Date(hourly.time[i]);
+            if (hTime >= activityStart && hTime <= activityEnd) {
+                sumTemp += hourly.temperature_2m[i] || 0;
+                sumFeels += hourly.apparent_temperature[i] || 0;
+                sumHum += hourly.relative_humidity_2m[i] || 0;
+                sumWind += hourly.wind_speed_10m[i] || 0;
+                sumWindDir += hourly.wind_direction_10m[i] || 0;
+                sumPrecip += hourly.precipitation[i] || 0;
+                lastCode = hourly.weather_code[i] || 0;
+                count++;
+            }
+        }
+        
+        if (count === 0) return null;
+        
+        const avgWindDir = sumWindDir / count;
+        const dirIndex = Math.round(avgWindDir / 22.5) % 16;
+        
+        return {
+            temperature: Math.round(sumTemp / count * 10) / 10,
+            feelsLike: Math.round(sumFeels / count * 10) / 10,
+            humidity: Math.round(sumHum / count),
+            windSpeed: Math.round(sumWind / count * 10) / 10,
+            windDirection: Math.round(avgWindDir),
+            precipitation: Math.round(sumPrecip * 10) / 10,
+            weatherCode: lastCode,
+            weatherDescription: WMO_CODES[lastCode] || 'Desconocido'
+        };
+    } catch (e) {
+        console.warn('Error fetching weather:', e);
+        return null;
+    }
+};
+
+export const getWindDirectionLabel = (degrees: number): string => {
+    const index = Math.round(degrees / 22.5) % 16;
+    return WIND_DIRECTIONS[index] || 'N';
 };

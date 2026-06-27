@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Session, SessionSummary, UserProfile, Notification } from './types';
 import { Icons, getSportConfig } from './icons';
-import { isSameDay, getMonthName, calculateTRIMP, calculateACSMVo2, calculateClimbScore, generateMockHistory, formatTime, formatPace, calculateAverageStrideLength } from './utils';
+import { isSameDay, getMonthName, calculateTRIMP, calculateACSMVo2, calculateClimbScore, generateMockHistory, formatTime, formatPace, calculateAverageStrideLength, getWindDirectionLabel } from './utils';
 import { getAllSessionSummaries, getFullSessionFromDB, saveSessionToDB, deleteSessionFromDB, clearDB } from './db';
 import { parseCsv, parseFitData, parsePolarJson } from './parsers';
 import { importFromIntervals } from './intervals';
@@ -25,7 +25,7 @@ import {
     InjuryPreventionCard
 } from './analytics';
 
-const Sidebar = ({ sessions, view, setView, selectedSessionId, handleSelectSession, setPlaybackIndex, searchQuery, setSearchQuery, selectedDate, setSelectedDate, expandedGroups, toggleGroup, exportDatabase, clearAllSessions, handleDataLoaded, deleteSession, addNotification, openProfile, isSelectionMode, toggleSelectionMode, selectedIds, toggleSelection, deleteSelected, syncIntervals }: any) => {
+const Sidebar = ({ sessions, view, setView, selectedSessionId, handleSelectSession, setPlaybackIndex, searchQuery, setSearchQuery, selectedDate, setSelectedDate, expandedGroups, toggleGroup, exportDatabase, clearAllSessions, handleDataLoaded, deleteSession, addNotification, openProfile, isSelectionMode, toggleSelectionMode, selectedIds, toggleSelection, deleteSelected, syncIntervals, syncCount, setSyncCount }: any) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -99,11 +99,25 @@ const Sidebar = ({ sessions, view, setView, selectedSessionId, handleSelectSessi
                 
                 <button 
                     onClick={syncIntervals}
-                    className="w-full bg-[#007AFF]/20 hover:bg-[#007AFF] text-[#007AFF] hover:text-white border border-[#007AFF]/50 rounded-xl p-3 flex items-center justify-center transition-all mb-4 text-sm font-bold group"
+                    className="w-full bg-[#007AFF]/20 hover:bg-[#007AFF] text-[#007AFF] hover:text-white border border-[#007AFF]/50 rounded-xl p-3 flex items-center justify-center transition-all mb-1 text-sm font-bold group"
                 >
                     <Icons.Refresh />
                     <span className="ml-2 group-hover:text-white">Sincronizar Intervals</span>
                 </button>
+                <div className="flex items-center justify-center mb-4 space-x-2">
+                    <span className="text-[10px] text-gray-500">Últimas</span>
+                    <select 
+                        value={syncCount} 
+                        onChange={e => setSyncCount(Number(e.target.value))}
+                        className="bg-white/10 border border-white/10 rounded-lg px-2 py-1 text-xs text-gray-300 outline-none"
+                    >
+                        <option value={5}>5</option>
+                        <option value={10}>10</option>
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                    </select>
+                    <span className="text-[10px] text-gray-500">actividades</span>
+                </div>
 
                  <div className="relative">
                     <input type="text" placeholder="Buscar..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-black/20 border border-white/10 rounded-lg py-2 pl-9 pr-2 text-sm text-gray-300 focus:border-[#34C759] outline-none" />
@@ -215,6 +229,7 @@ const App = () => {
     
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+    const [syncCount, setSyncCount] = useState(10);
 
     const toggleSelectionMode = () => {
         setIsSelectionMode(!isSelectionMode);
@@ -374,7 +389,8 @@ const App = () => {
             const addedSessions = await importFromIntervals(
                 userProfile.intervalsAthleteId, 
                 userProfile.intervalsApiKey,
-                (msg) => addNotification({ type: 'info', message: msg })
+                (msg) => addNotification({ type: 'info', message: msg }),
+                syncCount
             );
             
             if (addedSessions.length > 0) {
@@ -511,6 +527,44 @@ const App = () => {
                         <SummaryItem label="Climb Score" value={currentSession.climbScore || '-'} unit="" color="text-yellow-400" />
                      </div>
                 </div>
+                {currentSession.weather && (
+                <div className="glass-panel p-4 rounded-3xl mt-4 border border-white/10">
+                    <h4 className="text-xs font-semibold text-gray-400 mb-3 flex items-center">
+                        <svg className="w-4 h-4 mr-1.5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999 5.002 5.002 0 10-9.78 2.096A4.001 4.001 0 003 15z" /></svg>
+                        Meteorología: {currentSession.weather.weatherDescription}
+                    </h4>
+                    <div className="grid grid-cols-4 md:grid-cols-6 gap-3 text-center">
+                        <div className="bg-white/5 rounded-xl p-2">
+                            <p className="text-[10px] text-gray-500">Temp</p>
+                            <p className="text-sm font-bold text-white">{currentSession.weather.temperature}°C</p>
+                            <p className="text-[9px] text-gray-600">Sens. {currentSession.weather.feelsLike}°C</p>
+                        </div>
+                        <div className="bg-white/5 rounded-xl p-2">
+                            <p className="text-[10px] text-gray-500">Humedad</p>
+                            <p className="text-sm font-bold text-blue-300">{currentSession.weather.humidity}%</p>
+                        </div>
+                        <div className="bg-white/5 rounded-xl p-2">
+                            <p className="text-[10px] text-gray-500">Viento</p>
+                            <p className="text-sm font-bold text-cyan-300">{currentSession.weather.windSpeed} km/h</p>
+                            <p className="text-[9px] text-gray-600">{getWindDirectionLabel(currentSession.weather.windDirection)}</p>
+                        </div>
+                        <div className="bg-white/5 rounded-xl p-2">
+                            <p className="text-[10px] text-gray-500">Lluvia</p>
+                            <p className="text-sm font-bold text-blue-400">{currentSession.weather.precipitation} mm</p>
+                        </div>
+                        {currentSession.weather.temperature > 25 && (
+                        <div className="bg-amber-500/10 rounded-xl p-2 border border-amber-500/20 col-span-2">
+                            <p className="text-[10px] text-amber-400">⚠ Calor: el ritmo puede estar penalizado ~2-3% por encima de 25°C</p>
+                        </div>
+                        )}
+                        {currentSession.weather.windSpeed > 20 && (
+                        <div className="bg-cyan-500/10 rounded-xl p-2 border border-cyan-500/20 col-span-2">
+                            <p className="text-[10px] text-cyan-400">💨 Viento fuerte: pudo afectar al ritmo según dirección</p>
+                        </div>
+                        )}
+                    </div>
+                </div>
+                )}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6 mt-4 h-[450px]">
                     <div className="lg:col-span-2 relative rounded-3xl overflow-hidden border border-white/10 shadow-2xl h-full">
                         <MapComponent trackPoints={currentSession.trackPoints} currentIndex={Math.floor(playbackIndex)} />
@@ -553,6 +607,8 @@ const App = () => {
                 openProfile={() => setShowProfile(true)}
                 isSelectionMode={isSelectionMode} toggleSelectionMode={toggleSelectionMode} selectedIds={selectedIds} toggleSelection={toggleSelection} deleteSelected={deleteSelected}
                 syncIntervals={syncIntervals}
+                syncCount={syncCount}
+                setSyncCount={setSyncCount}
             />
             <main className="flex-1 h-full overflow-y-auto relative scrollbar-hide">
                 <div className="max-w-7xl mx-auto p-8 pt-12">

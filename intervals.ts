@@ -1,6 +1,8 @@
 import { Session, TrackPoint } from './types';
 import { calculateTRIMP, calculateACSMVo2, calculateClimbScore, calculateAverageStrideLength } from './utils';
 
+import { fetchWeatherForSession } from './utils';
+
 // Helper to convert base64 for Basic Auth
 const getAuthHeader = (apiKey: string) => {
     return 'Basic ' + btoa('API_KEY:' + apiKey);
@@ -45,14 +47,13 @@ export const fetchIntervalsActivityStreams = async (activityId: string, apiKey: 
     return await res.json();
 };
 
-export const importFromIntervals = async (athleteId: string, apiKey: string, onProgress: (msg: string) => void): Promise<Session[]> => {
+export const importFromIntervals = async (athleteId: string, apiKey: string, onProgress: (msg: string) => void, maxActivities: number = 10): Promise<Session[]> => {
     onProgress("Obteniendo lista de actividades desde Intervals.icu...");
     const activities = await fetchIntervalsActivities(athleteId, apiKey, '2010-01-01');
     const sessions: Session[] = [];
 
-    // Filter to limit amount? Let's process the last 10 for safety if it's too many, or just take first 20.
-    // Let's assume the user might have hundreds, we should fetch safely.
-    const toProcess = activities.slice(0, 50); // Get last 50 to avoid rate limits/hanging
+    // Importar solo las últimas N actividades (por defecto 10) para evitar duplicados masivos
+    const toProcess = activities.slice(0, maxActivities);
 
     let count = 0;
     for (const act of toProcess) {
@@ -135,6 +136,20 @@ export const importFromIntervals = async (athleteId: string, apiKey: string, onP
             session.acsmVo2Max = calculateACSMVo2(trackPoints, maxHr || 190, 60);
             session.trimp = session.trimp || calculateTRIMP(trackPoints, maxHr || 190, 60);
             session.climbScore = calculateClimbScore(session.totalElevationGain, session.distance);
+
+            // Fetch weather data for the session
+            const validCoords = trackPoints.filter(p => p.lat !== 0 && p.lon !== 0);
+            if (validCoords.length > 0) {
+                const startLat = validCoords[0].lat;
+                const startLon = validCoords[0].lon;
+                const endTime = new Date(act.start_date_local).getTime() + duration * 1000;
+                const endTimeStr = new Date(endTime).toISOString();
+                try {
+                    session.weather = await fetchWeatherForSession(startLat, startLon, act.start_date_local, endTimeStr);
+                } catch (e) {
+                    console.warn('Weather fetch failed for session', act.id, e);
+                }
+            }
 
             sessions.push(session);
 

@@ -18,6 +18,17 @@ export interface UserProfile {
     };
 }
 
+export interface WeatherData {
+    temperature: number;        // °C media durante la actividad
+    feelsLike: number;          // Sensación térmica (°C)
+    humidity: number;           // % humedad relativa
+    windSpeed: number;          // km/h
+    windDirection: number;      // grados (0=N, 90=E, 180=S, 270=O)
+    precipitation: number;      // mm
+    weatherCode: number;        // Código WMO
+    weatherDescription: string; // Ej: "Parcialmente nublado"
+}
+
 export interface TrackPoint {
   lat: number;
   lon: number;
@@ -59,6 +70,8 @@ export interface SessionSummary {
   // Métricas de Carga Subjetiva
   rpe?: number; // Escala 0-10 (Borg CR10 / Foster)
   internalLoad?: number; // sRPE (RPE * Duración en min) - Unidades Arbitrarias de Carga (UAC)
+  // Meteorología
+  weather?: WeatherData;
 }
 
 // Interfaz completa que extiende el resumen e incluye los datos pesados

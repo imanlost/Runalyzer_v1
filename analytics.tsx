@@ -477,18 +477,34 @@ export const IntensityDistribution = ({ sessions, profile, onShowInfo }: { sessi
 export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
     const mapRef = useRef<HTMLDivElement>(null);
     const leafletMap = useRef<L.Map | null>(null);
+    const polyRefs = useRef<Map<string, L.Polyline>>(new Map());
     const [fullData, setFullData] = useState<Session[]>([]);
     const [loading, setLoading] = useState(false);
+    
+    // Filtros
+    const [showFilters, setShowFilters] = useState(false);
+    const [minDist, setMinDist] = useState(0);
+    const [maxDist, setMaxDist] = useState(50);
+    const [minElev, setMinElev] = useState(0);
+    const [maxElev, setMaxElev] = useState(3000);
+    const [activeFilter, setActiveFilter] = useState(false);
 
-    // Estrategia de Carga Asíncrona para Heatmap
-    // Como las sesiones iniciales son 'SessionSummary' (sin trackPoints),
-    // si detectamos que faltan datos, pedimos a la DB las sesiones completas SOLO para el heatmap.
+    const filteredSessions = useMemo(() => {
+        if (!activeFilter) return null;
+        return (fullData.length > 0 ? fullData : sessions).filter(s => {
+            const distKm = s.distance / 1000;
+            return distKm >= minDist && distKm <= maxDist 
+                && s.totalElevationGain >= minElev 
+                && s.totalElevationGain <= maxElev;
+        });
+    }, [fullData, sessions, activeFilter, minDist, maxDist, minElev, maxElev]);
+
+    // Estrategia de Carga Asincrona para Heatmap
     useEffect(() => {
         const needsLoading = sessions.some(s => !s.trackPoints || s.trackPoints.length === 0);
         
         if (needsLoading && !loading && fullData.length === 0) {
             setLoading(true);
-            // Pequeño timeout para no bloquear el render inicial de la UI
             setTimeout(() => {
                 getAllSessionsFromDB().then(data => {
                     setFullData(data);
@@ -506,7 +522,6 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
     useEffect(() => {
         if (!mapRef.current) return;
         
-        // Inicializar mapa si no existe
         if (!leafletMap.current) {
             leafletMap.current = L.map(mapRef.current, { zoomControl: false, attributionControl: false }).setView([40.4168, -3.7038], 5);
              L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { opacity: 0.8 }).addTo(leafletMap.current);
@@ -520,20 +535,50 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
         map.eachLayer(layer => {
             if (layer instanceof L.Polyline) map.removeLayer(layer);
         });
+        polyRefs.current.clear();
         
         const bounds = L.latLngBounds([]);
         let hasLayer = false;
+        const filterIds = new Set(filteredSessions?.map(s => s.id) || []);
 
         validSessions.forEach(s => {
-             // FILTRO CRÍTICO: Eliminamos coordenadas (0,0) antes de pintar
              const latlngs = s.trackPoints
                 .filter(p => p.lat !== 0 && p.lon !== 0)
                 .map(p => [p.lat, p.lon] as [number, number]);
              
              if (latlngs.length > 0) {
-                 L.polyline(latlngs, { color: '#34C759', weight: 1.5, opacity: 0.25 }).addTo(map);
-                 bounds.extend(latlngs);
-                 hasLayer = true;
+                 const isFiltered = activeFilter && !filterIds.has(s.id);
+                 const color = activeFilter 
+                     ? (isFiltered ? '#1a1a2e' : '#34C759') 
+                     : '#34C759';
+                 const opacity = activeFilter
+                     ? (isFiltered ? 0.08 : 0.7)
+                     : 0.25;
+                 const weight = activeFilter && !isFiltered ? 3 : 1.5;
+                 
+                 const poly = L.polyline(latlngs, { color, weight, opacity }).addTo(map);
+                 
+                 // Click en ruta → info
+                 poly.on('click', () => {
+                     const distKm = (s.distance / 1000).toFixed(1);
+                     const elevM = s.totalElevationGain || 0;
+                     const name = s.name || 'Sin nombre';
+                     const date = new Date(s.startTime).toLocaleDateString('es-ES');
+                     poly.bindPopup(`
+                         <div style="font-family:system-ui;color:white;min-width:180px">
+                             <b>${name}</b><br/>
+                             📅 ${date}<br/>
+                             📏 ${distKm} km | ⛰ ${elevM} m D+<br/>
+                             ${s.weather ? `🌡 ${s.weather.temperature}°C | ${s.weather.weatherDescription}` : ''}
+                         </div>
+                     `).openPopup();
+                 });
+                 
+                 if (!isFiltered || !activeFilter) {
+                     bounds.extend(latlngs);
+                     hasLayer = true;
+                 }
+                 polyRefs.current.set(s.id, poly);
              }
         });
         
@@ -547,14 +592,115 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
                  leafletMap.current = null;
              }
         }
-    }, [fullData, sessions]);
+    }, [fullData, sessions, activeFilter, filteredSessions]);
+
+    const matchedCount = filteredSessions?.length || 0;
+    const totalCount = (fullData.length > 0 ? fullData : sessions).filter(s => s.trackPoints && s.trackPoints.length > 0).length;
 
     return (
         <div className="col-span-4 h-[800px] glass-panel rounded-3xl overflow-hidden relative group">
             <div ref={mapRef} className="w-full h-full bg-[#1C1C1E]"></div>
             <div className="absolute top-4 left-4 bg-black/50 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-white border border-white/10 pointer-events-none">
-                {loading ? 'Cargando datos GPS completos...' : `Heatmap Global (${fullData.length || sessions.length} actividades)`}
+                {loading ? 'Cargando datos GPS...' : activeFilter ? `${matchedCount} de ${totalCount} rutas` : `Heatmap Global (${totalCount} actividades)`}
             </div>
+            
+            {/* Botón de filtros */}
+            <button 
+                onClick={() => setShowFilters(!showFilters)}
+                className={`absolute top-4 right-4 px-3 py-2 rounded-full text-xs font-bold border transition-all ${
+                    activeFilter 
+                        ? 'bg-[#34C759]/20 text-[#34C759] border-[#34C759]/50' 
+                        : 'bg-black/50 backdrop-blur text-gray-400 border-white/10 hover:border-white/30'
+                }`}
+            >
+                🔍 Filtrar rutas
+            </button>
+            
+            {/* Panel de filtros */}
+            {showFilters && (
+            <div className="absolute top-16 right-4 bg-[#1C1C1E]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-5 w-72 shadow-2xl z-10">
+                <div className="flex justify-between items-center mb-4">
+                    <h4 className="text-sm font-bold text-white">Filtrar Rutas</h4>
+                    <button onClick={() => { setShowFilters(false); setActiveFilter(false); }} className="text-gray-500 hover:text-white text-lg">&times;</button>
+                </div>
+                
+                {/* Distancia */}
+                <div className="mb-4">
+                    <label className="text-[10px] text-gray-400 uppercase font-bold mb-1 block">Distancia (km)</label>
+                    <div className="flex space-x-2 items-center">
+                        <input type="number" value={minDist} onChange={e => setMinDist(Number(e.target.value))} 
+                            className="w-16 bg-white/10 border border-white/10 rounded-lg px-2 py-1 text-xs text-white text-center" 
+                            placeholder="Min" />
+                        <span className="text-gray-500 text-xs">a</span>
+                        <input type="number" value={maxDist} onChange={e => setMaxDist(Number(e.target.value))} 
+                            className="w-16 bg-white/10 border border-white/10 rounded-lg px-2 py-1 text-xs text-white text-center" 
+                            placeholder="Max" />
+                    </div>
+                </div>
+                
+                {/* Desnivel */}
+                <div className="mb-4">
+                    <label className="text-[10px] text-gray-400 uppercase font-bold mb-1 block">Desnivel positivo (m)</label>
+                    <div className="flex space-x-2 items-center">
+                        <input type="number" value={minElev} onChange={e => setMinElev(Number(e.target.value))} 
+                            className="w-16 bg-white/10 border border-white/10 rounded-lg px-2 py-1 text-xs text-white text-center" 
+                            placeholder="Min" />
+                        <span className="text-gray-500 text-xs">a</span>
+                        <input type="number" value={maxElev} onChange={e => setMaxElev(Number(e.target.value))} 
+                            className="w-16 bg-white/10 border border-white/10 rounded-lg px-2 py-1 text-xs text-white text-center" 
+                            placeholder="Max" />
+                    </div>
+                </div>
+                
+                {/* Quick presets */}
+                <div className="mb-4">
+                    <label className="text-[10px] text-gray-400 uppercase font-bold mb-1.5 block">Rápidos</label>
+                    <div className="flex flex-wrap gap-1.5">
+                        {[
+                            { label: '5K', minD: 4.5, maxD: 5.5 },
+                            { label: '7K', minD: 6.5, maxD: 7.5 },
+                            { label: '10K', minD: 9, maxD: 11 },
+                            { label: '+500m D+', minD: 0, maxD: 50, minE: 500, maxE: 3000 },
+                        ].map(preset => (
+                            <button key={preset.label}
+                                onClick={() => {
+                                    setMinDist(preset.minD);
+                                    setMaxDist(preset.maxD);
+                                    if (preset.minE !== undefined) setMinElev(preset.minE);
+                                    if (preset.maxE !== undefined) setMaxElev(preset.maxE);
+                                    setActiveFilter(true);
+                                }}
+                                className="px-2.5 py-1 text-[10px] rounded-full bg-white/5 hover:bg-[#34C759]/20 hover:text-[#34C759] text-gray-400 border border-white/5 transition-all"
+                            >
+                                {preset.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                
+                <div className="flex space-x-2">
+                    <button 
+                        onClick={() => setActiveFilter(true)}
+                        className="flex-1 py-2 rounded-xl bg-[#34C759] text-black text-xs font-bold hover:bg-[#2db14e] transition-colors"
+                    >
+                        Aplicar filtro
+                    </button>
+                    <button 
+                        onClick={() => { setActiveFilter(false); setMinDist(0); setMaxDist(50); setMinElev(0); setMaxElev(3000); }}
+                        className="py-2 px-3 rounded-xl bg-white/10 text-gray-400 text-xs hover:text-white transition-colors"
+                    >
+                        Limpiar
+                    </button>
+                </div>
+                
+                {activeFilter && (
+                    <p className="text-[10px] text-[#34C759] mt-2 text-center">
+                        {matchedCount} ruta{matchedCount !== 1 ? 's' : ''} encontrada{matchedCount !== 1 ? 's' : ''}
+                    </p>
+                )}
+            </div>
+            )}
+            
             {loading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/50 backdrop-blur-sm z-10">
                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#34C759]"></div>
