@@ -306,6 +306,11 @@ const App = () => {
         try {
             const fullSession = await getFullSessionFromDB(id);
             if (fullSession) {
+                // Normalizar datos antiguos que puedan tener decimales
+                if (fullSession.totalElevationGain && fullSession.totalElevationGain !== Math.round(fullSession.totalElevationGain)) {
+                    fullSession.totalElevationGain = Math.round(fullSession.totalElevationGain);
+                    saveSessionToDB(fullSession).catch(() => {});
+                }
                 setSelectedSession(fullSession);
                 
                 // Cargar meteorología bajo demanda si la sesión no la tiene
@@ -313,18 +318,27 @@ const App = () => {
                     const validCoords = fullSession.trackPoints.filter(p => p.lat !== 0 && p.lon !== 0);
                     if (validCoords.length > 0 && fullSession.distance > 0) {
                         const endTime = new Date(fullSession.startTime).getTime() + fullSession.duration * 1000;
+                        console.log('[Weather] Fetching for session:', fullSession.name, 'coords:', validCoords[0].lat, validCoords[0].lon);
                         fetchWeatherForSession(
                             validCoords[0].lat, 
                             validCoords[0].lon, 
                             fullSession.startTime, 
                             new Date(endTime).toISOString()
                         ).then(weather => {
+                            console.log('[Weather] Result:', weather);
                             if (weather) {
                                 const updated = { ...fullSession, weather };
                                 setSelectedSession(updated);
                                 saveSessionToDB(updated).catch(() => {});
+                            } else {
+                                setSelectedSession({ ...fullSession, weather: undefined as any });
                             }
-                        }).catch(() => {});
+                        }).catch(e => {
+                            console.error('[Weather] Fetch error:', e);
+                            setSelectedSession({ ...fullSession, weather: undefined as any });
+                        });
+                    } else {
+                        console.log('[Weather] No valid GPS coords in session:', fullSession.name);
                     }
                 }
             } else {

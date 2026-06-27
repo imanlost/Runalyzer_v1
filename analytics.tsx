@@ -601,7 +601,7 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
     return (
         <div className="col-span-4 h-[800px] glass-panel rounded-3xl overflow-hidden relative group">
             <div ref={mapRef} className="w-full h-full bg-[#1C1C1E]"></div>
-            <div className="absolute top-4 left-4 bg-black/50 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-white border border-white/10 pointer-events-none">
+            <div className="absolute top-4 left-4 bg-black/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-white border border-white/15 pointer-events-none">
                 {loading ? 'Cargando datos GPS...' 
                     : effectiveFilter ? `${matchedCount} de ${totalCount} rutas` 
                     : activeFilter ? `⚠ 0 coincidencias — mostrando ${totalCount} rutas`
