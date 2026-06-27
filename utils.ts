@@ -366,16 +366,28 @@ export const fetchWeatherForSession = async (lat: number, lon: number, startTime
         
         const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${startDate}&end_date=${endDate}&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,wind_speed_10m,wind_direction_10m,precipitation,weather_code&timezone=Europe%2FMadrid`;
         
+        console.log('[Weather] URL:', url);
         const resp = await fetch(url);
-        if (!resp.ok) return null;
+        console.log('[Weather] HTTP', resp.status, resp.statusText);
+        if (!resp.ok) {
+            console.warn('[Weather] Response not OK:', resp.status, await resp.text().catch(() => ''));
+            return null;
+        }
         
         const data = await resp.json();
+        console.log('[Weather] Data received, keys:', Object.keys(data));
         const hourly = data.hourly;
-        if (!hourly || !hourly.time) return null;
+        if (!hourly || !hourly.time) {
+            console.warn('[Weather] No hourly data in response');
+            return null;
+        }
         
         // Encontrar las horas que caen dentro de la actividad
         const activityStart = new Date(startTime);
         const activityEnd = new Date(endTime);
+        
+        console.log('[Weather] Activity window:', startTime, '→', endTime);
+        console.log('[Weather] Available hours:', hourly.time.length, 'first:', hourly.time[0], 'last:', hourly.time[hourly.time.length-1]);
         
         let sumTemp = 0, sumFeels = 0, sumHum = 0, sumWind = 0, sumWindDir = 0, sumPrecip = 0;
         let lastCode = 0;
@@ -395,12 +407,13 @@ export const fetchWeatherForSession = async (lat: number, lon: number, startTime
             }
         }
         
+        console.log('[Weather] Matched hours:', count, 'of', hourly.time.length);
         if (count === 0) return null;
         
         const avgWindDir = sumWindDir / count;
         const dirIndex = Math.round(avgWindDir / 22.5) % 16;
         
-        return {
+        const result = {
             temperature: Math.round(sumTemp / count * 10) / 10,
             feelsLike: Math.round(sumFeels / count * 10) / 10,
             humidity: Math.round(sumHum / count),
@@ -410,8 +423,10 @@ export const fetchWeatherForSession = async (lat: number, lon: number, startTime
             weatherCode: lastCode,
             weatherDescription: WMO_CODES[lastCode] || 'Desconocido'
         };
+        console.log('[Weather] SUCCESS:', result);
+        return result;
     } catch (e) {
-        console.warn('Error fetching weather:', e);
+        console.error('[Weather] EXCEPTION:', e);
         return null;
     }
 };
