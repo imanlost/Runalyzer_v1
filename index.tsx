@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Session, SessionSummary, UserProfile, Notification } from './types';
 import { Icons, getSportConfig } from './icons';
-import { isSameDay, getMonthName, calculateTRIMP, calculateACSMVo2, calculateClimbScore, generateMockHistory, formatTime, formatPace, calculateAverageStrideLength, getWindDirectionLabel } from './utils';
+import { isSameDay, getMonthName, calculateTRIMP, calculateACSMVo2, calculateClimbScore, generateMockHistory, formatTime, formatPace, calculateAverageStrideLength, getWindDirectionLabel, fetchWeatherForSession } from './utils';
 import { getAllSessionSummaries, getFullSessionFromDB, saveSessionToDB, deleteSessionFromDB, clearDB } from './db';
 import { parseCsv, parseFitData, parsePolarJson } from './parsers';
 import { importFromIntervals } from './intervals';
@@ -307,6 +307,26 @@ const App = () => {
             const fullSession = await getFullSessionFromDB(id);
             if (fullSession) {
                 setSelectedSession(fullSession);
+                
+                // Cargar meteorología bajo demanda si la sesión no la tiene
+                if (!fullSession.weather && fullSession.trackPoints && fullSession.trackPoints.length > 0) {
+                    const validCoords = fullSession.trackPoints.filter(p => p.lat !== 0 && p.lon !== 0);
+                    if (validCoords.length > 0 && fullSession.distance > 0) {
+                        const endTime = new Date(fullSession.startTime).getTime() + fullSession.duration * 1000;
+                        fetchWeatherForSession(
+                            validCoords[0].lat, 
+                            validCoords[0].lon, 
+                            fullSession.startTime, 
+                            new Date(endTime).toISOString()
+                        ).then(weather => {
+                            if (weather) {
+                                const updated = { ...fullSession, weather };
+                                setSelectedSession(updated);
+                                saveSessionToDB(updated).catch(() => {});
+                            }
+                        }).catch(() => {});
+                    }
+                }
             } else {
                 addNotification({ type: 'error', message: 'Error cargando detalles de la sesión.' });
             }
@@ -522,7 +542,7 @@ const App = () => {
                         <SummaryItem label="Ritmo" value={formatPace((1000/(currentSession.distance/currentSession.duration))/60)} unit="/km" />
                         <SummaryItem label="FC Media" value={currentSession.avgHr} unit="bpm" />
                         <SummaryItem label="Calorías" value={currentSession.calories} unit="kcal" />
-                        <SummaryItem label="Desnivel +" value={currentSession.totalElevationGain} unit="m" />
+                        <SummaryItem label="Desnivel +" value={Math.round(currentSession.totalElevationGain)} unit="m" />
                         <SummaryItem label="Carga" value={currentSession.trimp || '-'} unit="TRIMP" color="text-purple-400" />
                         <SummaryItem label="Climb Score" value={currentSession.climbScore || '-'} unit="" color="text-yellow-400" />
                      </div>

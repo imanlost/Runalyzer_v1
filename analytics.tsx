@@ -547,21 +547,21 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
                 .map(p => [p.lat, p.lon] as [number, number]);
              
              if (latlngs.length > 0) {
-                 const isFiltered = activeFilter && !filterIds.has(s.id);
-                 const color = activeFilter 
+                 const isFiltered = effectiveFilter && !filterIds.has(s.id);
+                 const color = effectiveFilter 
                      ? (isFiltered ? '#1a1a2e' : '#34C759') 
                      : '#34C759';
-                 const opacity = activeFilter
+                 const opacity = effectiveFilter
                      ? (isFiltered ? 0.08 : 0.7)
                      : 0.25;
-                 const weight = activeFilter && !isFiltered ? 3 : 1.5;
+                 const weight = effectiveFilter && !isFiltered ? 3 : 1.5;
                  
                  const poly = L.polyline(latlngs, { color, weight, opacity }).addTo(map);
                  
                  // Click en ruta → info
                  poly.on('click', () => {
                      const distKm = (s.distance / 1000).toFixed(1);
-                     const elevM = s.totalElevationGain || 0;
+                     const elevM = Math.round(s.totalElevationGain) || 0;
                      const name = s.name || 'Sin nombre';
                      const date = new Date(s.startTime).toLocaleDateString('es-ES');
                      poly.bindPopup(`
@@ -574,7 +574,7 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
                      `).openPopup();
                  });
                  
-                 if (!isFiltered || !activeFilter) {
+                 if (!isFiltered || !effectiveFilter) {
                      bounds.extend(latlngs);
                      hasLayer = true;
                  }
@@ -596,12 +596,16 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
 
     const matchedCount = filteredSessions?.length || 0;
     const totalCount = (fullData.length > 0 ? fullData : sessions).filter(s => s.trackPoints && s.trackPoints.length > 0).length;
+    const effectiveFilter = activeFilter && matchedCount > 0; // Si el filtro no encuentra nada, mostramos todo
 
     return (
         <div className="col-span-4 h-[800px] glass-panel rounded-3xl overflow-hidden relative group">
             <div ref={mapRef} className="w-full h-full bg-[#1C1C1E]"></div>
             <div className="absolute top-4 left-4 bg-black/50 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-white border border-white/10 pointer-events-none">
-                {loading ? 'Cargando datos GPS...' : activeFilter ? `${matchedCount} de ${totalCount} rutas` : `Heatmap Global (${totalCount} actividades)`}
+                {loading ? 'Cargando datos GPS...' 
+                    : effectiveFilter ? `${matchedCount} de ${totalCount} rutas` 
+                    : activeFilter ? `⚠ 0 coincidencias — mostrando ${totalCount} rutas`
+                    : `Heatmap Global (${totalCount} actividades)`}
             </div>
             
             {/* Botón de filtros */}
@@ -694,8 +698,10 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
                 </div>
                 
                 {activeFilter && (
-                    <p className="text-[10px] text-[#34C759] mt-2 text-center">
-                        {matchedCount} ruta{matchedCount !== 1 ? 's' : ''} encontrada{matchedCount !== 1 ? 's' : ''}
+                    <p className={`text-[10px] mt-2 text-center ${matchedCount > 0 ? 'text-[#34C759]' : 'text-amber-400'}`}>
+                        {matchedCount > 0 
+                            ? `${matchedCount} ruta${matchedCount !== 1 ? 's' : ''} encontrada${matchedCount !== 1 ? 's' : ''}`
+                            : 'Ninguna ruta coincide — prueba otros valores'}
                     </p>
                 )}
             </div>

@@ -121,7 +121,7 @@ export const importFromIntervals = async (athleteId: string, apiKey: string, onP
                 avgHr: avgHr,
                 maxHr: maxHr,
                 calories: act.calories || Math.round((duration/60) * 12),
-                totalElevationGain: act.total_elevation_gain || 0,
+                totalElevationGain: Math.round(act.total_elevation_gain || 0),
                 avgCadence: act.average_cadence || 0,
                 vam6min: 0, 
                 best20minSpeed: 0,
