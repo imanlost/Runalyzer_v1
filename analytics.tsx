@@ -602,7 +602,7 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
         <div className="col-span-4 h-[800px] rounded-3xl overflow-hidden relative group border border-white/5" style={{background: '#121214'}}>
             <div ref={mapRef} className="w-full h-full bg-[#1C1C1E]"></div>
             <div style={{
-                position: 'absolute', top: '16px', left: '16px', zIndex: 20,
+                position: 'absolute', top: '16px', left: '16px', zIndex: 1000,
                 background: '#000', padding: '4px 12px', borderRadius: '9999px',
                 fontSize: '12px', fontWeight: 700, color: '#fff',
                 border: '1px solid rgba(255,255,255,0.15)', pointerEvents: 'none'
@@ -617,7 +617,7 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
             <button 
                 onClick={() => setShowFilters(!showFilters)}
                 style={{
-                    position: 'absolute', top: '16px', right: '16px', zIndex: 20,
+                    position: 'absolute', top: '16px', right: '16px', zIndex: 1000,
                     padding: '8px 14px', borderRadius: '9999px',
                     fontSize: '12px', fontWeight: 700, cursor: 'pointer',
                     border: activeFilter ? '1px solid #34C759' : '1px solid rgba(255,255,255,0.1)',
@@ -632,7 +632,7 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
             {/* Panel de filtros — 100% inline, sin Tailwind */}
             {showFilters && (
             <div style={{
-                position: 'absolute', top: '64px', right: '16px', zIndex: 30,
+                position: 'absolute', top: '64px', right: '16px', zIndex: 1000,
                 background: '#121214', border: '1px solid rgba(255,255,255,0.15)',
                 borderRadius: '16px', padding: '20px', width: '288px',
                 boxShadow: '0 0 40px rgba(0,0,0,0.95)'
