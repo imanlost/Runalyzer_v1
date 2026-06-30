@@ -143,7 +143,9 @@ export const importFromIntervals = async (athleteId: string, apiKey: string, onP
                 const startLat = validCoords[0].lat;
                 const startLon = validCoords[0].lon;
                 const endTime = new Date(act.start_date_local).getTime() + duration * 1000;
-                const endTimeStr = new Date(endTime).toISOString();
+                const ed = new Date(endTime);
+                const pad2 = (n: number) => String(n).padStart(2, '0');
+                const endTimeStr = `${ed.getFullYear()}-${pad2(ed.getMonth()+1)}-${pad2(ed.getDate())}T${pad2(ed.getHours())}:${pad2(ed.getMinutes())}:${pad2(ed.getSeconds())}`;
                 try {
                     session.weather = await fetchWeatherForSession(startLat, startLon, act.start_date_local, endTimeStr);
                 } catch (e) {

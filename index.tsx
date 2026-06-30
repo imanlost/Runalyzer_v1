@@ -323,7 +323,7 @@ const App = () => {
                             validCoords[0].lat, 
                             validCoords[0].lon, 
                             fullSession.startTime, 
-                            new Date(endTime).toISOString()
+                            (() => { const ed = new Date(endTime); const p = (n: number) => String(n).padStart(2,'0'); return `${ed.getFullYear()}-${p(ed.getMonth()+1)}-${p(ed.getDate())}T${p(ed.getHours())}:${p(ed.getMinutes())}:${p(ed.getSeconds())}`; })()
                         ).then(weather => {
                             console.log('[Weather] Result:', weather);
                             if (weather) {
