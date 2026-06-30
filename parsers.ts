@@ -430,7 +430,7 @@ export const parseFitData = (arrayBuffer: ArrayBuffer, filename: string): Promis
                         sport: sport, 
                         avgHr: avgHr, 
                         maxHr: finalMaxHr, 
-                        calories: calculatedCalories || 0, 
+                        calories: Math.round(calculatedCalories || 0), 
                         totalElevationGain: Math.round(finalAscent), 
                         avgCadence: finalAvgCadence, 
                         vam6min: vam6min || 0, 
