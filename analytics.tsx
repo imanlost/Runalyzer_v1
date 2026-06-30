@@ -601,28 +601,42 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
     return (
         <div className="col-span-4 h-[800px] rounded-3xl overflow-hidden relative group border border-white/5" style={{background: '#121214'}}>
             <div ref={mapRef} className="w-full h-full bg-[#1C1C1E]"></div>
-            <div className="absolute top-4 left-4 bg-black px-3 py-1 rounded-full text-xs font-bold text-white border border-white/15 pointer-events-none">
+            <div style={{
+                position: 'absolute', top: '16px', left: '16px', zIndex: 20,
+                background: '#000', padding: '4px 12px', borderRadius: '9999px',
+                fontSize: '12px', fontWeight: 700, color: '#fff',
+                border: '1px solid rgba(255,255,255,0.15)', pointerEvents: 'none'
+            }}>
                 {loading ? 'Cargando datos GPS...' 
                     : effectiveFilter ? `${matchedCount} de ${totalCount} rutas` 
                     : activeFilter ? `⚠ 0 coincidencias — mostrando ${totalCount} rutas`
                     : `Heatmap Global (${totalCount} actividades)`}
             </div>
             
-            {/* Botón de filtros */}
+            {/* Botón de filtros — 100% inline, sin Tailwind */}
             <button 
                 onClick={() => setShowFilters(!showFilters)}
-                className={`absolute top-4 right-4 px-3 py-2 rounded-full text-xs font-bold border transition-all ${
-                    activeFilter 
-                        ? 'bg-[#34C759] text-black border-[#34C759]' 
-                        : 'bg-black text-gray-400 border-white/10 hover:border-white/30'
-                }`}
+                style={{
+                    position: 'absolute', top: '16px', right: '16px', zIndex: 20,
+                    padding: '8px 14px', borderRadius: '9999px',
+                    fontSize: '12px', fontWeight: 700, cursor: 'pointer',
+                    border: activeFilter ? '1px solid #34C759' : '1px solid rgba(255,255,255,0.1)',
+                    background: activeFilter ? '#34C759' : '#000',
+                    color: activeFilter ? '#000' : '#9ca3af',
+                    transition: 'all 0.15s'
+                }}
             >
                 🔍 Filtrar rutas
             </button>
             
-            {/* Panel de filtros */}
+            {/* Panel de filtros — 100% inline, sin Tailwind */}
             {showFilters && (
-            <div className="absolute top-16 right-4 border border-white/15 rounded-2xl p-5 w-72 z-10" style={{background: '#121214', boxShadow: '0 0 40px rgba(0,0,0,0.9)'}}>
+            <div style={{
+                position: 'absolute', top: '64px', right: '16px', zIndex: 30,
+                background: '#121214', border: '1px solid rgba(255,255,255,0.15)',
+                borderRadius: '16px', padding: '20px', width: '288px',
+                boxShadow: '0 0 40px rgba(0,0,0,0.95)'
+            }}>
                 <div className="flex justify-between items-center mb-4">
                     <h4 className="text-sm font-bold text-white">Filtrar Rutas</h4>
                     <button onClick={() => { setShowFilters(false); setActiveFilter(false); }} className="text-gray-500 hover:text-white text-lg">&times;</button>
