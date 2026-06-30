@@ -554,7 +554,7 @@ const App = () => {
                         <SummaryItem label="Tiempo" value={formatTime(currentSession.duration)} unit="" />
                         <SummaryItem label="Distancia" value={(currentSession.distance/1000).toFixed(2)} unit="km" />
                         <SummaryItem label="Ritmo" value={formatPace((1000/(currentSession.distance/currentSession.duration))/60)} unit="/km" />
-                        <SummaryItem label="FC Media" value={currentSession.avgHr} unit="bpm" />
+                        <SummaryItem label="FC Media" value={Math.round(currentSession.avgHr)} unit="bpm" />
                         <SummaryItem label="Calorías" value={Math.round(currentSession.calories)} unit="kcal" />
                         <SummaryItem label="Desnivel +" value={Math.round(currentSession.totalElevationGain)} unit="m" />
                         <SummaryItem label="Carga" value={currentSession.trimp || '-'} unit="TRIMP" color="text-purple-400" />

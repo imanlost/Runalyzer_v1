@@ -108,7 +108,7 @@ export const importFromIntervals = async (athleteId: string, apiKey: string, onP
             else if (act.type === 'Swim') sport = 'SWIMMING';
 
             const validHrs = trackPoints.filter(p => p.hr > 0).map(p => p.hr);
-            const avgHr = validHrs.length > 0 ? Math.round(validHrs.reduce((a,b)=>a+b,0)/validHrs.length) : (act.average_heartrate || 0);
+            const avgHr = validHrs.length > 0 ? Math.round(validHrs.reduce((a,b)=>a+b,0)/validHrs.length) : Math.round(act.average_heartrate || 0);
             const maxHr = validHrs.length > 0 ? Math.max(...validHrs) : (act.max_heartrate || 0);
 
             const session: Session = {
