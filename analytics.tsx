@@ -552,8 +552,8 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
                      ? (isFiltered ? '#1a1a2e' : '#34C759') 
                      : '#34C759';
                  const opacity = effectiveFilter
-                     ? (isFiltered ? 0.08 : 0.7)
-                     : 0.25;
+                     ? (isFiltered ? 1.0 : 0.55)
+                     : 0.85;
                  const weight = effectiveFilter && !isFiltered ? 3 : 1.5;
                  
                  const poly = L.polyline(latlngs, { color, weight, opacity }).addTo(map);
