@@ -622,7 +622,7 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
             
             {/* Panel de filtros */}
             {showFilters && (
-            <div className="absolute top-16 right-4 bg-[#1C1C1E] border border-white/15 rounded-2xl p-5 w-72 shadow-2xl z-10" style={{boxShadow: '0 0 40px rgba(0,0,0,0.8)'}}>
+            <div className="absolute top-16 right-4 border border-white/15 rounded-2xl p-5 w-72 z-10" style={{background: '#121214', boxShadow: '0 0 40px rgba(0,0,0,0.9)'}}>
                 <div className="flex justify-between items-center mb-4">
                     <h4 className="text-sm font-bold text-white">Filtrar Rutas</h4>
                     <button onClick={() => { setShowFilters(false); setActiveFilter(false); }} className="text-gray-500 hover:text-white text-lg">&times;</button>
