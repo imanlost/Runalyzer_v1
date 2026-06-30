@@ -599,7 +599,7 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
     const effectiveFilter = activeFilter && matchedCount > 0; // Si el filtro no encuentra nada, mostramos todo
 
     return (
-        <div className="col-span-4 h-[800px] glass-panel rounded-3xl overflow-hidden relative group">
+        <div className="col-span-4 h-[800px] rounded-3xl overflow-hidden relative group border border-white/5" style={{background: '#121214'}}>
             <div ref={mapRef} className="w-full h-full bg-[#1C1C1E]"></div>
             <div className="absolute top-4 left-4 bg-black px-3 py-1 rounded-full text-xs font-bold text-white border border-white/15 pointer-events-none">
                 {loading ? 'Cargando datos GPS...' 
