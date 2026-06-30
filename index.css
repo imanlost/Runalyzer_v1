@@ -1,3 +1,5 @@
+@import "tailwindcss";
+
 /* Leaflet dark popup overrides */
 .leaflet-popup-content-wrapper {
     background: #1a1a2e !important;
