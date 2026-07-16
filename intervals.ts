@@ -85,7 +85,7 @@ export const importFromIntervals = async (athleteId: string, apiKey: string, onP
                     lat: latStream[i] || 0,
                     lon: lonStream[i] || 0,
                     hr: hrStream[i] || 0,
-                    speed: speedStream[i] || 0,
+                    speed: (speedStream[i] || 0) * 3.6, // Convertir m/s → km/h (consistente con parsers.ts)
                     altitude: altStream[i] || 0,
                     dist: distStream[i] || 0,
                     cadence: cadenceStream[i] || 0
