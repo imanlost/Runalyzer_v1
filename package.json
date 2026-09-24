@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "tsc --noEmit",
+    "test": "esbuild tests/utils.test.ts --bundle --platform=node --format=esm --outfile=/tmp/runalyzer-tests.mjs --log-level=error && node --test /tmp/runalyzer-tests.mjs",
     "tauri": "tauri"
   },
   "dependencies": {
