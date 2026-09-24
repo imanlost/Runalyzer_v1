@@ -13,6 +13,7 @@ import { strict as assert } from 'node:assert';
 import {
     formatMetric,
     formatPace,
+    getWeekStartMonday,
     calculateElevationGain,
     calculateSlidingWindowMaxSpeed,
     calculateGradeAdjustedPace,
@@ -76,6 +77,22 @@ test('formatPace redondea el total de segundos antes de descomponerlo', () => {
     assert.equal(formatPace(0), '--');
     assert.equal(formatPace(-1), '--');
     assert.equal(formatPace(NaN), '--');
+});
+
+test('getWeekStartMonday asigna el domingo a la semana del lunes anterior', () => {
+    // Domingo 20 de septiembre de 2020 → lunes 14 de septiembre.
+    const domingo = new Date(2020, 8, 20, 18, 30);
+    const lunes = getWeekStartMonday(domingo);
+    assert.equal(lunes.getDay(), 1, 'debe devolver un lunes');
+    assert.equal(lunes.getFullYear(), 2020);
+    assert.equal(lunes.getMonth(), 8);
+    assert.equal(lunes.getDate(), 14);
+    assert.equal(lunes.getHours(), 0, 'debe quedar a medianoche');
+    // El propio lunes y el resto de la semana caen en la misma semana.
+    assert.equal(getWeekStartMonday(new Date(2020, 8, 14)).getDate(), 14);
+    assert.equal(getWeekStartMonday(new Date(2020, 8, 19)).getDate(), 14);
+    // El lunes siguiente abre una semana nueva.
+    assert.equal(getWeekStartMonday(new Date(2020, 8, 21)).getDate(), 21);
 });
 
 test('calculateElevationGain suaviza el ruido del altímetro y da 0 en terreno llano', () => {

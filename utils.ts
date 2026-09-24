@@ -62,6 +62,20 @@ export const getMonthName = (date: Date) => {
     return date.toLocaleDateString('es-ES', { month: 'long' });
 };
 
+/**
+ * Lunes de la semana natural a la que pertenece `date` (semana que empieza en
+ * lunes), a medianoche. `getDay()` devuelve 0 para domingo, así que se reindexa
+ * con `(getDay() + 6) % 7` para que el domingo caiga en la semana del lunes
+ * anterior y no en la siguiente.
+ */
+export const getWeekStartMonday = (date: Date): Date => {
+    const monday = new Date(date);
+    const desplazamiento = (date.getDay() + 6) % 7;
+    monday.setDate(date.getDate() - desplazamiento);
+    monday.setHours(0, 0, 0, 0);
+    return monday;
+};
+
 export const calculateTRIMP = (trackPoints: TrackPoint[], maxHr: number, restHr: number): number => {
     let trimp = 0;
     for (let i = 1; i < trackPoints.length; i++) {

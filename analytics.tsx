@@ -4,7 +4,7 @@ import L from 'leaflet';
 import { Session, UserProfile, TrackPoint, DailyFitness } from './types';
 import { Icons, getSportConfig } from './icons';
 import { InfoTooltip, MetricCard } from './components';
-import { calculateGlobalVo2Max, formatPace, formatTime, formatMetric, calculateIndividualizedK, calculateACWR } from './utils';
+import { calculateGlobalVo2Max, formatPace, formatTime, formatMetric, calculateIndividualizedK, calculateACWR, getWeekStartMonday } from './utils';
 import { getAllSessionsFromDB, getFullSessionFromDB } from './db'; 
 
 // --- COMPONENTES AUXILIARES PARA ANALYTICS ---
@@ -389,88 +389,126 @@ export const RecoveryAdvisor = ({ sessions, onShowInfo }: { sessions: Session[],
 };
 
 export const IntensityDistribution = ({ sessions, profile, onShowInfo }: { sessions: Session[], profile: UserProfile, onShowInfo: (t: string) => void }) => {
-    let z1End, z3End;
+    const hasCustomZones = !!profile.customZones;
+    let lowEnd: number, highStart: number;
 
     if (profile.customZones) {
         // En polarizado 3 zonas:
         // Baja = Z1 + Z2
         // Media (Gris) = Z3
         // Alta = Z4 + Z5
-        z1End = profile.customZones.z2; 
-        z3End = profile.customZones.z3; // El final de la zona gris (Z3) es el inicio de la alta
+        lowEnd = profile.customZones.z2;
+        highStart = profile.customZones.z3; // El final de la zona gris (Z3) es el inicio de la alta
     } else {
+        // Estimación por el método de Karvonen (60 % y 80 % de la reserva cardíaca).
         const fcr = profile.maxHr - profile.restHr;
-        z1End = Math.round(profile.restHr + 0.60 * fcr);
-        z3End = Math.round(profile.restHr + 0.80 * fcr); 
+        lowEnd = Math.round(profile.restHr + 0.60 * fcr);
+        highStart = Math.round(profile.restHr + 0.80 * fcr);
     }
-    
+
     // Estado para manejar la carga de datos completos si faltan trackpoints
     const [fullData, setFullData] = useState<Session[]>([]);
     const [loading, setLoading] = useState(false);
 
-    // Cargar datos completos para las últimas 20 sesiones si es necesario
+    // Solo interesan las sesiones de las últimas 8 semanas.
+    const recent = useMemo(() => {
+        const since = Date.now() - 8 * 7 * 24 * 60 * 60 * 1000;
+        return sessions.filter(s => new Date(s.startTime).getTime() >= since);
+    }, [sessions]);
+
     useEffect(() => {
-        const top20 = sessions.slice(0, 20);
-        const needsLoading = top20.some(s => !s.trackPoints);
-        
+        if (recent.length === 0) { setFullData([]); return; }
+        const needsLoading = recent.some(s => !s.trackPoints || s.trackPoints.length === 0);
         if (needsLoading) {
             setLoading(true);
-            const promises = top20.map(s => getFullSessionFromDB(s.id));
-            Promise.all(promises).then(results => {
-                const validResults = results.filter((s): s is Session => !!s);
-                setFullData(validResults);
+            Promise.all(recent.map(s => getFullSessionFromDB(s.id))).then(results => {
+                setFullData(results.filter((s): s is Session => !!s));
                 setLoading(false);
             }).catch(() => setLoading(false));
         } else {
-            setFullData(top20);
+            setFullData(recent as Session[]);
         }
-    }, [sessions]);
+    }, [recent]);
 
-    let low = 0, mid = 0, high = 0;
-    
-    // Usar fullData para cálculos
-    fullData.forEach(s => {
-        if (s.trackPoints) {
-            s.trackPoints.forEach(p => {
-                 if (p.hr > 0) {
-                     if (p.hr <= z1End) low++;
-                     else if (p.hr <= z3End) mid++;
-                     else high++;
-                 }
+    // Ventanas semanales (lunes a domingo) de las últimas 8 semanas con el
+    // TIEMPO acumulado en cada zona. Se construyen siempre las 8 semanas para
+    // que la gráfica tenga una barra por semana aunque alguna esté vacía.
+    const weeks = useMemo(() => {
+        const buckets = new Map<string, { low: number; mid: number; high: number }>();
+        fullData.forEach(s => {
+            const pts = s.trackPoints;
+            if (!pts || pts.length < 2) return;
+            const monday = getWeekStartMonday(new Date(s.startTime));
+            const k = monday.toISOString();
+            if (!buckets.has(k)) buckets.set(k, { low: 0, mid: 0, high: 0 });
+            const bucket = buckets.get(k)!;
+            for (let i = 0; i < pts.length - 1; i++) {
+                const hr = pts[i].hr;
+                if (!(hr > 0)) continue;
+                const dt = (new Date(pts[i + 1].timestamp).getTime() - new Date(pts[i].timestamp).getTime()) / 1000;
+                if (!(dt > 0) || dt > 60) continue; // descarta huecos de GPS
+                if (hr <= lowEnd) bucket.low += dt;
+                else if (hr <= highStart) bucket.mid += dt;
+                else bucket.high += dt;
+            }
+        });
+
+        const thisMonday = getWeekStartMonday(new Date());
+        const result: { key: string; label: string; total: number; low: number; mid: number; high: number }[] = [];
+        for (let i = 7; i >= 0; i--) {
+            const monday = new Date(thisMonday);
+            monday.setDate(monday.getDate() - i * 7);
+            const k = monday.toISOString();
+            const b = buckets.get(k);
+            const low = b?.low || 0, mid = b?.mid || 0, high = b?.high || 0;
+            const total = low + mid + high;
+            result.push({
+                key: k,
+                label: `${monday.getDate()}/${monday.getMonth()+1}`,
+                total,
+                low: total > 0 ? (low / total) * 100 : 0,
+                mid: total > 0 ? (mid / total) * 100 : 0,
+                high: total > 0 ? (high / total) * 100 : 0,
             });
         }
-    });
-    
-    const total = low + mid + high || 1;
-    const pLow = total > 0 ? Math.round((low/total)*100) : 0;
-    const pMid = total > 0 ? Math.round((mid/total)*100) : 0;
-    const pHigh = total > 0 ? Math.round((high/total)*100) : 0;
+        return result;
+    }, [fullData, lowEnd, highStart]);
 
     return (
         <div className="glass-panel p-4 rounded-3xl relative">
-            <h5 className="text-xs font-bold text-purple-400 uppercase mb-2 flex justify-between">Polarización (Últ 20) <InfoTooltip type="polarized" /></h5>
+            <h5 className="text-xs font-bold text-purple-400 uppercase mb-2 flex justify-between">Polarización (8 sem) <InfoTooltip type="polarized" /></h5>
+            <p className="text-[9px] text-gray-500 mb-3">Porcentaje de TIEMPO por semana · {hasCustomZones ? 'zonas personalizadas' : 'estimación por el método de Karvonen'}</p>
             {loading ? (
                 <div className="h-20 flex items-center justify-center">
                     <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-500"></div>
                 </div>
             ) : (
-                <div className="flex justify-between items-end h-20 px-2 space-x-2">
-                    <div className="w-1/3 flex flex-col items-center h-full justify-end">
-                        <span className="text-[10px] text-green-400 font-bold mb-1">{pLow}%</span>
-                        <div className="w-full bg-green-500/20 rounded-t-lg relative" style={{ height: `${Math.max(4, pLow)}%` }}><div className="absolute bottom-0 w-full bg-green-500 rounded-t-lg" style={{ height: '4px' }}></div></div>
-                        <span className="text-[9px] text-gray-500 mt-1">Baja</span>
+                <>
+                    <div className="flex items-end h-24 px-1 space-x-1">
+                        {weeks.map(w => (
+                            <div key={w.key} className="flex-1 flex flex-col items-center h-full justify-end group relative">
+                                <div className="w-full h-full flex flex-col justify-end rounded-t-md overflow-hidden bg-white/5">
+                                    <div style={{ height: `${w.high}%`, backgroundColor: '#EF4444' }}></div>
+                                    <div style={{ height: `${w.mid}%`, backgroundColor: '#FACC15' }}></div>
+                                    <div style={{ height: `${w.low}%`, backgroundColor: '#34C759' }}></div>
+                                </div>
+                                <span className="text-[8px] text-gray-500 mt-1">{w.label}</span>
+                                <div className="absolute -top-1 left-1/2 -translate-x-1/2 -translate-y-full hidden group-hover:block bg-[#1C1C1E] border border-white/20 rounded-lg p-2 text-[9px] whitespace-nowrap z-20">
+                                    <p className="text-gray-400 font-bold mb-1">Semana {w.label}</p>
+                                    <p className="text-green-400">Baja: {Math.round(w.low)}%</p>
+                                    <p className="text-yellow-400">Gris: {Math.round(w.mid)}%</p>
+                                    <p className="text-red-400">Alta: {Math.round(w.high)}%</p>
+                                    <p className="text-gray-500">{Math.round(w.total / 60)} min</p>
+                                </div>
+                            </div>
+                        ))}
                     </div>
-                     <div className="w-1/3 flex flex-col items-center h-full justify-end">
-                        <span className="text-[10px] text-yellow-400 font-bold mb-1">{pMid}%</span>
-                        <div className="w-full bg-yellow-500/20 rounded-t-lg relative" style={{ height: `${Math.max(4, pMid)}%` }}><div className="absolute bottom-0 w-full bg-yellow-500 rounded-t-lg" style={{ height: '4px' }}></div></div>
-                        <span className="text-[9px] text-gray-500 mt-1">Zona Gris</span>
+                    <div className="flex justify-center space-x-3 text-[9px] mt-2">
+                        <span className="text-green-400">● Baja</span>
+                        <span className="text-yellow-400">● Zona gris</span>
+                        <span className="text-red-400">● Alta</span>
                     </div>
-                     <div className="w-1/3 flex flex-col items-center h-full justify-end">
-                        <span className="text-[10px] text-red-400 font-bold mb-1">{pHigh}%</span>
-                        <div className="w-full bg-red-500/20 rounded-t-lg relative" style={{ height: `${Math.max(4, pHigh)}%` }}><div className="absolute bottom-0 w-full bg-red-500 rounded-t-lg" style={{ height: '4px' }}></div></div>
-                        <span className="text-[9px] text-gray-500 mt-1">Alta</span>
-                    </div>
-                </div>
+                </>
             )}
         </div>
     );
@@ -766,39 +804,57 @@ export const PersonalRecords = ({ sessions }: { sessions: Session[] }) => {
 
 export const FitnessTrendChart = ({ sessions }: { sessions: Session[] }) => {
     const [hoverIndex, setHoverIndex] = useState<number | null>(null);
-    const dailyData: DailyFitness[] = [];
-    const now = new Date();
-    const days = 90;
-    
+
+    // Clave de día ISO local (año-mes-día) construida a mano: no depende del
+    // idioma del sistema como toLocaleDateString().
+    const localDateKey = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
     const sorted = [...sessions].sort((a,b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime());
-    
-    let ctl = 0, atl = 0;
+
     const trimpMap = new Map<string, number>();
     sorted.forEach(s => {
-        const k = new Date(s.startTime).toLocaleDateString();
+        const k = localDateKey(new Date(s.startTime));
         trimpMap.set(k, (trimpMap.get(k)||0) + (s.trimp || 0));
     });
 
-    const start = new Date();
-    start.setDate(start.getDate() - days);
+    // El PMC arranca desde el primer día con historial: el CTL necesita ~42 días
+    // para estabilizarse y calcularlo desde el inicio de la ventana pintada
+    // infravaloraba toda la parte izquierda de la gráfica.
+    const fullDailyData: DailyFitness[] = [];
+    if (sorted.length > 0) {
+        let ctl = 0, atl = 0;
+        const firstDay = new Date(sorted[0].startTime);
+        firstDay.setHours(0, 0, 0, 0);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
 
-    for (let i = 0; i < days; i++) {
-        const d = new Date(start);
-        d.setDate(d.getDate() + i);
-        const k = d.toLocaleDateString();
-        const trimp = trimpMap.get(k) || 0;
-        
-        ctl = ctl + (trimp - ctl) / 42;
-        atl = atl + (trimp - atl) / 7;
-        const tsb = ctl - atl;
-        
-        dailyData.push({ date: k, ctl: Math.round(ctl), atl: Math.round(atl), tsb: Math.round(tsb), trimp });
+        for (const d = new Date(firstDay); d.getTime() <= today.getTime(); d.setDate(d.getDate() + 1)) {
+            const k = localDateKey(d);
+            const trimp = trimpMap.get(k) || 0;
+            ctl = ctl + (trimp - ctl) / 42;
+            atl = atl + (trimp - atl) / 7;
+            fullDailyData.push({ date: k, ctl, atl, tsb: ctl - atl, trimp });
+        }
     }
+
+    // Solo se pintan los últimos 90 días; el resto se usa para estabilizar el PMC.
+    const dailyData = fullDailyData.slice(-90);
+    const days = dailyData.length;
 
     const width = 800;
     const height = 200;
     const padding = 20;
-    
+
+    if (days < 2) {
+        return (
+            <div className="glass-panel p-10 rounded-3xl col-span-4 flex flex-col items-center justify-center text-gray-500">
+                <Icons.Chart />
+                <p className="mt-2 text-sm">Necesitas más de un día de historial para ver la forma física.</p>
+            </div>
+        );
+    }
+
     const maxVal = Math.max(...dailyData.map(d => Math.max(d.ctl, d.atl))) || 1;
     const minTsb = Math.min(...dailyData.map(d => d.tsb), 0);
     const maxTsb = Math.max(...dailyData.map(d => d.tsb), 0);
@@ -806,15 +862,16 @@ export const FitnessTrendChart = ({ sessions }: { sessions: Session[] }) => {
 
     const getX = (i: number) => (i / (days-1)) * width;
     const getY = (val: number) => height - padding - (val/maxVal) * (height - padding*2);
-    
-    const zeroY = height - padding - ((0 - minTsb)/tsbRange) * (height/2);
 
     const pathCtl = dailyData.map((d, i) => `${getX(i)},${getY(d.ctl)}`).join(' L');
     const pathAtl = dailyData.map((d, i) => `${getX(i)},${getY(d.atl)}`).join(' L');
 
     return (
         <div className="glass-panel p-5 rounded-3xl col-span-4 relative group">
-             <h4 className="text-sm font-semibold text-gray-400 mb-4 flex items-center"><Icons.Chart /> <span className="ml-2">Forma Física (PMC)</span></h4>
+             <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-4 gap-1">
+                 <h4 className="text-sm font-semibold text-gray-400 flex items-center"><Icons.Chart /> <span className="ml-2">Forma Física (PMC)</span></h4>
+                 <p className="text-[10px] text-gray-500">Calculado desde el primer día con historial · se pintan los últimos 90 días</p>
+             </div>
              <div className="relative h-64 w-full">
                  <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible" preserveAspectRatio="none">
                      <path d={`M${pathCtl}`} fill="none" stroke="#3B82F6" strokeWidth="2" />
@@ -928,9 +985,9 @@ export const WeeklyVolumeChart = ({ sessions }: { sessions: Session[] }) => {
     
     sorted.forEach(s => {
         const d = new Date(s.startTime);
-        const monday = new Date(d);
-        monday.setDate(d.getDate() - d.getDay() + 1); 
-        monday.setHours(0,0,0,0);
+        // El domingo (getDay() === 0) cae en la semana del lunes anterior; antes
+        // se le sumaba un día de más y su volumen pasaba a la semana siguiente.
+        const monday = getWeekStartMonday(d);
         const k = monday.toISOString();
         if (!weeks[k]) weeks[k] = { dist: 0, dur: 0, label: `${monday.getDate()}/${monday.getMonth()+1}`, ts: monday.getTime() };
         weeks[k].dist += s.distance/1000;
