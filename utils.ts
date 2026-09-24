@@ -154,10 +154,12 @@ export const calculateSlidingWindowMaxSpeed = (trackPoints: TrackPoint[], window
     for (let right = 1; right < times.length; right++) {
         while (times[right] - times[left] > windowSeconds) left++;
         const duration = times[right] - times[left];
-        // Se exige la ventana COMPLETA: aceptar un 90 % (5 min 24 s para 6 min)
-        // sobreestima la velocidad aeróbica máxima. Con datos a 1 Hz la duración
-        // máxima dentro de la ventana es exactamente `windowSeconds`.
-        if (duration >= windowSeconds) {
+        // Se exige la ventana COMPLETA, con una tolerancia de 3 s para relojes
+        // que no muestrean exactamente a 1 Hz: un hueco de muestreo obligaría a
+        // descartar la mejor ventana y devolvería VAM 0 sin avisar. La ventana
+        // aceptada es de `windowSeconds - 3` (357 s para 6 min). El sesgo que se
+        // elimina al no aceptar el 90 % (324 s) era del 10 %; con 3 s es < 1,5 %.
+        if (duration >= windowSeconds - 3) {
             const distance = dists[right] - dists[left];
             const speedMps = distance / duration;
             if (speedMps > maxSpeed && speedMps < 7.0) maxSpeed = speedMps;

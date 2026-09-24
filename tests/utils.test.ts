@@ -63,7 +63,7 @@ test('calculateElevationGain acumula el desnivel neto real descartando el ruido'
     assert.ok(gain < pointToPoint / 2, `el suavizado debería bajar de ${pointToPoint}, obtuve ${gain}`);
 });
 
-test('calculateSlidingWindowMaxSpeed exige la ventana completa', () => {
+test('calculateSlidingWindowMaxSpeed exige la ventana con solo 3 s de tolerancia', () => {
     // Los primeros 324 s a 5 m/s y el resto hasta 360 s a 0.5 m/s.
     // La ventana de 324 s daría 5 m/s, pero la de 360 s da 4.55 m/s.
     const trackPoints = Array.from({ length: 361 }, (_, t) => ({
@@ -72,6 +72,21 @@ test('calculateSlidingWindowMaxSpeed exige la ventana completa', () => {
     }));
     const speed = calculateSlidingWindowMaxSpeed(trackPoints, 360);
     assert.ok(speed > 4.5 && speed < 4.6, `esperaba ~4.55 m/s, obtuve ${speed}`);
+});
+
+test('calculateSlidingWindowMaxSpeed tolera relojes que no muestrean a 1 Hz', () => {
+    // Muestreo a 1,3 s: ninguna ventana alcanza los 360 s exactos; la mayor
+    // dentro del límite dura 358,8 s (>= 357 s). Sin la tolerancia de 3 s la
+    // VAM sería 0 en silencio.
+    const trackPoints = Array.from({ length: 350 }, (_, i) => {
+        const t = i * 1.3;
+        return {
+            lat: 0, lon: 0, timestamp: new Date(t * 1000).toISOString(), hr: 0,
+            speed: 5, altitude: 0, dist: 5 * t, cadence: 0
+        };
+    });
+    const speed = calculateSlidingWindowMaxSpeed(trackPoints, 360);
+    assert.ok(speed > 4.9 && speed < 5.1, `esperaba ~5 m/s, obtuve ${speed}`);
 });
 
 
