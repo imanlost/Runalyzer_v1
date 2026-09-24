@@ -478,6 +478,21 @@ export const estimateVentilatoryThresholds = (
     };
 };
 
+/**
+ * Potencia de carrera ESTIMADA (W). Sin potenciómetro no es una medida, solo
+ * un modelo. Mantiene la escala clásica peso × velocidad × 1,04 y le añade el
+ * factor de coste de Minetti, de modo que en llano (grade = 0) el valor no
+ * cambia y en subida deja de quedarse corto.
+ *
+ * @param weightKg peso del corredor en kg
+ * @param speedMps velocidad en m/s
+ * @param grade pendiente en fracción (por defecto 0 = llano)
+ */
+export const estimatePower = (weightKg: number, speedMps: number, grade: number = 0): number => {
+    if (!(weightKg > 0) || !(speedMps > 0)) return 0;
+    return weightKg * speedMps * 1.04 * minettiCostFactor(grade);
+};
+
 export const calculateACSMVo2 = (trackPoints: TrackPoint[], maxHr: number, restHr: number = 60): number => {
     if (!trackPoints || trackPoints.length < 300) return 0;
 

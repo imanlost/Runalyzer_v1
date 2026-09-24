@@ -20,6 +20,7 @@ import {
     detectThresholdPace,
     paceZonesFromThreshold,
     estimateVentilatoryThresholds,
+    estimatePower,
     calculateACSMVo2,
 } from '../utils.ts';
 import type { ThresholdSession } from '../utils.ts';
@@ -312,4 +313,17 @@ test('calculateACSMVo2 usa la FC de reposo recibida (no la fija a 60)', () => {
     const with60 = calculateACSMVo2(points, 190, 60);
     assert.ok(with45 > 0 && with60 > 0, `esperaba VO2max positivos, obtuve ${with45} y ${with60}`);
     assert.ok(with45 < with60, `con restHr 45 debería salir menor que con 60: ${with45} vs ${with60}`);
+});
+
+// --- TAREA 5: potencia estimada con pendiente ---
+
+test('estimatePower mantiene la escala en llano y sube con la pendiente', () => {
+    const flat = estimatePower(78, 3.0, 0);
+    const uphill = estimatePower(78, 3.0, 0.05);
+    // 78 × 3,0 × 1,04 = 243,36 W → 243 W sin decimales.
+    assertClose(flat, 243.36, 1e-9, 'potencia en llano');
+    assert.equal(formatMetric(flat), '243');
+    // Con el factor de Minetti a +5 % (1,301): 316,7 W → 317 W.
+    assertClose(uphill, flat * 1.301443, 1e-3, 'potencia a +5 %');
+    assert.equal(formatMetric(uphill), '317');
 });
