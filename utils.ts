@@ -84,6 +84,35 @@ export const calculateClimbScore = (gain: number, distanceMeters: number): numbe
     return Math.round((gain * gradient) / 100); 
 };
 
+/**
+ * Acumula desnivel positivo con histéresis de 1 metro.
+ *
+ * El altímetro oscila de forma natural (~30 cm entre muestras). Si se suma cada
+ * incremento punto a punto, cada oscilación cuenta como subida y el desnivel
+ * queda muy por encima del real (el que da intervals.icu). Con 1 m de umbral:
+ * - Se descarta el ruido del altímetro, que casi nunca llega a ese metro.
+ * - Solo se acumula el cambio neto cuando la altitud supera la referencia en
+ *   1 m o más; en ese momento la referencia pasa a ser la nueva altitud.
+ * - En los descensos de más de 1 m la referencia también baja, para que las
+ *   subidas repetidas en terreno ondulado se cuenten.
+ * La altitud 0 se trata como ausente (centinela habitual de los GPS).
+ */
+export const calculateElevationGain = (altitudes: number[], threshold: number = 1): number => {
+    let gain = 0;
+    let ref: number | null = null;
+    for (const alt of altitudes) {
+        if (typeof alt !== 'number' || !Number.isFinite(alt) || alt === 0) continue;
+        if (ref === null) { ref = alt; continue; }
+        if (alt >= ref + threshold) {
+            gain += alt - ref;
+            ref = alt;
+        } else if (alt <= ref - threshold) {
+            ref = alt;
+        }
+    }
+    return gain;
+};
+
 export const calculateSlidingWindowMaxSpeed = (trackPoints: TrackPoint[], windowSeconds: number): number => {
     if (trackPoints.length < 2) return 0;
     const times = trackPoints.map(p => new Date(p.timestamp).getTime() / 1000);

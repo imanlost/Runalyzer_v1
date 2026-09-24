@@ -4,7 +4,7 @@ import FitParserModule from 'fit-file-parser';
 // @ts-ignore
 import * as BufferModule from 'buffer';
 import { Session, TrackPoint } from './types';
-import { generateSessionName, calculateSlidingWindowMaxSpeed, calculateACSMVo2, calculateTRIMP, calculateClimbScore } from './utils';
+import { generateSessionName, calculateSlidingWindowMaxSpeed, calculateACSMVo2, calculateTRIMP, calculateClimbScore, calculateElevationGain } from './utils';
 
 // Robust Buffer Polyfill
 const Buffer = BufferModule.Buffer || (BufferModule as any).default?.Buffer || (window as any).Buffer;
@@ -42,7 +42,7 @@ export const parseCsv = (text: string, filename: string): Session => {
     if (timeIdx === -1) throw new Error("No se encontró columna de tiempo/fecha en el CSV");
     const trackPoints: TrackPoint[] = [];
     let startTimeStr = '';
-    let maxHr = 0; let sumHr = 0; let validHrCount = 0; let cumDist = 0; let totalElevationGain = 0;
+    let maxHr = 0; let sumHr = 0; let validHrCount = 0; let cumDist = 0;
     let sumCad = 0; let countCad = 0; let sumStride = 0; let countStride = 0;
 
     // Control de última posición válida
@@ -82,7 +82,6 @@ export const parseCsv = (text: string, filename: string): Session => {
         if (i > 1) {
              // Si alt es 0 pero teníamos elevación antes, mantener la anterior para evitar caídas a nivel del mar falsas
              if (currentAlt === 0 && trackPoints[trackPoints.length - 1].altitude > 0) currentAlt = trackPoints[trackPoints.length - 1].altitude;
-             if (currentAlt > trackPoints[trackPoints.length - 1].altitude) { totalElevationGain += (currentAlt - trackPoints[trackPoints.length - 1].altitude); }
         }
         
         // Gestión robusta de coordenadas
@@ -100,6 +99,8 @@ export const parseCsv = (text: string, filename: string): Session => {
 
         trackPoints.push({ lat: currentLat, lon: currentLon, timestamp, hr, speed: speedMps * 3.6, altitude: currentAlt, dist: cumDist, cadence: cad, strideLength: stride });
     }
+    // Desnivel positivo con histéresis de 1 m para no sumar el ruido del altímetro
+    const totalElevationGain = calculateElevationGain(trackPoints.map(p => p.altitude));
     const duration = trackPoints.length > 1 ? (new Date(trackPoints[trackPoints.length-1].timestamp).getTime() - new Date(startTimeStr).getTime()) / 1000 : 0;
     
     const vam6min = calculateSlidingWindowMaxSpeed(trackPoints, 360);
@@ -141,7 +142,7 @@ export const parsePolarJson = (json: any, filename: string): Session => {
     const cadences = samples.cadence || []; 
     const trackPoints: TrackPoint[] = [];
     const len = Math.max(route.length, heartRates.length);
-    let cumDist = 0; let sumHr = 0; let maxHr = 0; let totalAscent = 0;
+    let cumDist = 0; let sumHr = 0; let maxHr = 0;
     let sumCad = 0; let countCad = 0; let sumStride = 0; let countStride = 0;
 
     for (let i = 0; i < len; i++) {
@@ -164,8 +165,6 @@ export const parsePolarJson = (json: any, filename: string): Session => {
             } else { stride = 0; }
         }
 
-        if (i > 0) { const prevAlt = trackPoints[i-1].altitude; if (altVal > prevAlt) totalAscent += (altVal - prevAlt); }
-        
         // Polar suele tener rutas coherentes, pero por seguridad:
         const lat = routePt.latitude || 0;
         const lon = routePt.longitude || 0;
@@ -173,6 +172,8 @@ export const parsePolarJson = (json: any, filename: string): Session => {
         trackPoints.push({ lat: lat, lon: lon, timestamp:  new Date(new Date(startTime).getTime() + i * 1000).toISOString(), hr: hrVal, speed: speedVal, altitude: altVal, dist: cumDist, cadence: cadVal, strideLength: stride });
     }
     if (trackPoints.length === 0) { return { id: `polar-stub`, name: 'Polar Import', startTime: new Date().toISOString(), duration: 0, distance: 0, sport: 'OTHER', avgHr: 0, maxHr: 0, calories: 0, totalElevationGain: 0, avgCadence: 0, vam6min: 0, best20minSpeed: 0, acsmVo2Max: 0, trackPoints: [], trimp: 0, climbScore: 0 }; }
+    // Desnivel positivo con histéresis de 1 m para no sumar el ruido del altímetro
+    const totalAscent = calculateElevationGain(trackPoints.map(p => p.altitude));
     const sport = exercise.sport || 'RUNNING'; const distance = exercise.distance || cumDist; const finalMaxHr = exercise.heartRate?.maximum || maxHr;
     
     const vam6min = calculateSlidingWindowMaxSpeed(trackPoints, 360);
@@ -291,7 +292,7 @@ export const parseFitData = (arrayBuffer: ArrayBuffer, filename: string): Promis
                     
                     if (validRecords.length === 0) { reject(new Error("Datos encontrados pero las fechas no son válidas.")); return; }
                     
-                    let calculatedDist = 0; let maxHr = 0; let hrSum = 0; let hrCount = 0; let totalAscent = 0; let cadenceSum = 0; let cadenceCount = 0; 
+                    let calculatedDist = 0; let maxHr = 0; let hrSum = 0; let hrCount = 0; let cadenceSum = 0; let cadenceCount = 0; 
                     let strideSum = 0; let strideCount = 0; let stanceSum = 0; let stanceCount = 0; let vertOscSum = 0; let vertOscCount = 0; let vertRatioSum = 0; let vertRatioCount = 0;
 
                     const trackPoints: TrackPoint[] = []; 
@@ -353,15 +354,9 @@ export const parseFitData = (arrayBuffer: ArrayBuffer, filename: string): Promis
                         const hr = curr.heart_rate || curr.heart_rate_bpm || 0; 
                         if (hr > 0) { if (hr > maxHr) maxHr = hr; hrSum += hr; hrCount++; }
                         
+                        // La altitud se guarda tal cual; el desnivel positivo se calcula al final
+                        // con histéresis de 1 m (calculateElevationGain) para no sumar ruido del altímetro.
                         let alt = curr.enhanced_altitude ?? curr.altitude ?? 0; 
-                        if (prevTp) { 
-                            const prevAlt = prevTp.altitude; 
-                            // Filtro básico de ruido de altitud
-                            if (alt !== 0 && alt > prevAlt) { 
-                                const diff = alt - prevAlt; 
-                                if (diff < 50) totalAscent += diff; // Evitar saltos irreales de altitud
-                            } 
-                        }
                         
                         const cad = curr.cadence || 0; 
                         if (cad > 0) { cadenceSum += cad; cadenceCount++; }
@@ -392,6 +387,8 @@ export const parseFitData = (arrayBuffer: ArrayBuffer, filename: string): Promis
                             verticalRatio: vertRatio
                         });
                     }
+                    // Desnivel positivo con histéresis de 1 m para no sumar el ruido del altímetro
+                    const calculatedAscent = calculateElevationGain(trackPoints.map(p => p.altitude));
                     let sport = 'OTHER'; if (sessionData?.sport) sport = sessionData.sport.toUpperCase();
                     
                     let acsmVo2Max = calculateACSMVo2(trackPoints, maxHr || DEFAULT_MAX_HR, DEFAULT_REST_HR);
@@ -414,7 +411,7 @@ export const parseFitData = (arrayBuffer: ArrayBuffer, filename: string): Promis
                     if (!calculatedCalories) { calculatedCalories = Math.round(duration / 60 * 10); }
 
                     const avgHr = sessionData?.avg_heart_rate || (hrCount > 0 ? Math.round(hrSum / hrCount) : 0); const finalMaxHr = sessionData?.max_heart_rate || maxHr;
-                    const finalAscent = sessionData?.total_ascent ?? Math.round(totalAscent); const finalAvgCadence = sessionData?.avg_cadence ?? (cadenceCount > 0 ? Math.round(cadenceSum / cadenceCount) : 0);
+                    const finalAscent = sessionData?.total_ascent ?? Math.round(calculatedAscent); const finalAvgCadence = sessionData?.avg_cadence ?? (cadenceCount > 0 ? Math.round(cadenceSum / cadenceCount) : 0);
                     
                     const avgStride = sessionData?.avg_step_length ? sessionData.avg_step_length / 1000 : (strideCount > 0 ? strideSum / strideCount : 0);
                     const avgStance = sessionData?.avg_stance_time || (stanceCount > 0 ? stanceSum / stanceCount : 0);
