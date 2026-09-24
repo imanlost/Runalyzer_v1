@@ -184,15 +184,21 @@ export const SummaryItem = ({ label, value, unit, color }: any) => (
     </div>
 );
 
-export const MetricCard = ({ label, value, unit, colorClass, icon }: any) => (
-    <div className="glass-panel p-3 rounded-2xl flex items-center justify-between">
-        <div>
-            <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">{label}</p>
-            <p className={`text-2xl font-bold font-mono ${colorClass}`}>{typeof value === 'number' ? formatMetric(value) : value} <span className="text-xs text-gray-500 ml-1">{unit}</span></p>
+export const MetricCard = ({ label, value, unit, colorClass, icon }: any) => {
+    const texto = typeof value === 'number' ? formatMetric(value) : String(value ?? '');
+    return (
+    <div className="glass-panel p-3 rounded-2xl flex items-center justify-between gap-2 overflow-hidden">
+        <div className="min-w-0">
+            <p className="text-[10px] text-gray-400 uppercase font-bold mb-1 truncate">{label}</p>
+            {/* min-w-0 + truncate: sin esto un total largo (horas acumuladas, desnivel) se sale de la tarjeta */}
+            <p className={`text-2xl font-bold font-mono ${colorClass} truncate`} title={texto}>
+                {texto} <span className="text-xs text-gray-500 ml-1">{unit}</span>
+            </p>
         </div>
-        <div className={`text-2xl opacity-20 ${colorClass}`}>{icon}</div>
+        <div className={`text-2xl opacity-20 shrink-0 ${colorClass}`}>{icon}</div>
     </div>
-);
+    );
+};
 
 export const ProfileModal = ({ isOpen, onClose, profile, onSave }: any) => {
     const [localProfile, setLocalProfile] = useState(profile);

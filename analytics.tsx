@@ -31,14 +31,14 @@ export const InjuryPreventionCard = ({ sessions }: { sessions: Session[] }) => {
                 Prevención Lesiones <InfoTooltip type="acwr" />
             </h5>
             
-            <div className="flex items-end justify-between mb-2">
-                <div>
-                    <span className={`text-2xl font-bold font-mono ${conf.color}`}>{acwr.ratio.toFixed(2)}</span>
+            <div className="flex items-end justify-between mb-2 gap-2">
+                <div className="min-w-0">
+                    <span className={`text-2xl font-bold font-mono ${conf.color} whitespace-nowrap`}>{acwr.ratio.toFixed(2)}</span>
                     <span className="text-[10px] text-gray-500 ml-1 font-bold uppercase">{conf.label}</span>
                 </div>
-                <div className="text-right">
-                    <p className="text-[10px] text-gray-400">Aguda: <span className="text-white font-mono">{formatMetric(acwr.acuteLoad)}</span></p>
-                    <p className="text-[10px] text-gray-400">Crónica: <span className="text-white font-mono">{formatMetric(acwr.chronicLoad)}</span></p>
+                <div className="text-right shrink-0">
+                    <p className="text-[10px] text-gray-400 whitespace-nowrap">Aguda: <span className="text-white font-mono">{formatMetric(acwr.acuteLoad)}</span></p>
+                    <p className="text-[10px] text-gray-400 whitespace-nowrap">Crónica: <span className="text-white font-mono">{formatMetric(acwr.chronicLoad)}</span></p>
                 </div>
             </div>
 
@@ -932,13 +932,15 @@ export const FitnessTrendChart = ({ sessions }: { sessions: Session[] }) => {
                     </div>
                  )}
 
-                 <div className="flex justify-end space-x-4 text-[10px] mt-2">
-                     <span className="text-blue-500 font-bold">Fitness (CTL)</span>
-                     <span className="text-pink-500 font-bold">Fatiga (ATL)</span>
-                     <span className="text-gray-400 font-bold">Forma (TSB)</span>
                  </div>
-             </div>
-        </div>
+
+                 {/* Leyenda fuera del contenedor de altura fija: dentro se salía 2 px de la tarjeta */}
+                 <div className="flex justify-end space-x-4 text-[10px] mt-2">
+                 <span className="text-blue-500 font-bold">Fitness (CTL)</span>
+                 <span className="text-pink-500 font-bold">Fatiga (ATL)</span>
+                 <span className="text-gray-400 font-bold">Forma (TSB)</span>
+                 </div>
+                 </div>
     );
 };
 
@@ -990,7 +992,11 @@ export const PaceAtFixedHrChart = ({ sessions }: { sessions: Session[] }) => {
             const bucket = acc.get(key)!;
             for (let i = 1; i < pts.length; i++) {
                 const hr = pts[i].hr;
-                if (!(hr >= 145 && hr <= 155)) continue;
+                // Banda de 140-165 lpm (referencia 150): con 145-155 el filtro dejaba fuera
+                // casi todo el entrenamiento real (medido: 2 min en un rodaje de 41 min, porque
+                // sus rodajes viven entre 150 y 168 lpm). La banda es fija, así que el sesgo
+                // que introduce es constante entre meses y la tendencia sigue siendo comparable.
+                if (!(hr >= 140 && hr <= 165)) continue;
                 const dt = (new Date(pts[i].timestamp).getTime() - new Date(pts[i - 1].timestamp).getTime()) / 1000;
                 if (!(dt > 0) || dt > 60) continue; // descarta puntos parados y huecos de GPS
                 const dd = pts[i].dist - pts[i - 1].dist;
@@ -1005,9 +1011,10 @@ export const PaceAtFixedHrChart = ({ sessions }: { sessions: Session[] }) => {
             }
         });
 
-        // Solo se pintan los meses con al menos 20 minutos de muestra válida.
+        // Solo se pintan los meses con al menos 5 minutos de muestra válida. Con menos, el
+        // promedio mensual es ruido; el listón estaba en 20 minutos y dejaba el gráfico vacío.
         return [...acc.values()]
-            .filter(m => m.time >= 20 * 60 && m.dist > 0)
+            .filter(m => m.time >= 5 * 60 && m.dist > 0)
             .sort((a, b) => a.ts - b.ts)
             .map(m => ({
                 ts: m.ts,
