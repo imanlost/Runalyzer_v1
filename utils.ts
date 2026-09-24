@@ -85,6 +85,43 @@ export const calculateClimbScore = (gain: number, distanceMeters: number): numbe
 };
 
 /**
+ * Suaviza un stream de altitud con una media móvil centrada de 15 muestras.
+ *
+ * Se usa como paso previo tanto para el desnivel acumulado como para la
+ * pendiente del GAP. En los extremos se replica el valor más cercano para que
+ * la ventana tenga siempre 15 muestras y un pico aislado no pese de más. Los
+ * huecos (0 o valores no finitos) no cuentan en la media y dejan la muestra
+ * como ausente (NaN).
+ */
+export const smoothAltitudes = (altitudes: number[]): number[] => {
+    const isValidAltitude = (alt: number) => typeof alt === 'number' && Number.isFinite(alt) && alt !== 0;
+
+    const windowSize = 15;
+    const half = Math.floor(windowSize / 2);
+    const total = altitudes.length;
+
+    // Con menos muestras que la ventana, la media móvil no aporta nada y los
+    // bordes dominarían la señal (una rampa lineal se aplanaría y la pendiente
+    // del GAP saldría corta). Se devuelve la señal tal cual, conservando los
+    // huecos como NaN para que el desnivel los siga ignorando.
+    if (total < windowSize) {
+        return altitudes.map(a => isValidAltitude(a) ? a : NaN);
+    }
+
+    const smoothed: number[] = [];
+    for (let i = 0; i < total; i++) {
+        let sum = 0;
+        let count = 0;
+        for (let k = -half; k <= half; k++) {
+            const j = Math.min(total - 1, Math.max(0, i + k));
+            if (isValidAltitude(altitudes[j])) { sum += altitudes[j]; count++; }
+        }
+        smoothed.push(count > 0 ? sum / count : NaN);
+    }
+    return smoothed;
+};
+
+/**
  * Estima el desnivel positivo a partir del stream de altitud.
  *
  * IMPORTANTE: esto es solo un RESPALDO para fuentes que no traen un desnivel ya
@@ -109,25 +146,9 @@ export const calculateClimbScore = (gain: number, distanceMeters: number): numbe
  * desnivel del barómetro del reloj.
  */
 export const calculateElevationGain = (altitudes: number[], threshold: number = 0.5): number => {
-    const isValidAltitude = (alt: number) => typeof alt === 'number' && Number.isFinite(alt) && alt !== 0;
-
-    // 1) Suavizado con media móvil centrada de 15 muestras. En los extremos se
-    // replica el valor más cercano para que la ventana tenga siempre 15 muestras
-    // y un pico aislado no pese de más. Los huecos (0 o valores no finitos) no
-    // cuentan en la media y dejan la muestra como ausente.
-    const windowSize = 15;
-    const half = Math.floor(windowSize / 2);
-    const total = altitudes.length;
-    const smoothed: number[] = [];
-    for (let i = 0; i < total; i++) {
-        let sum = 0;
-        let count = 0;
-        for (let k = -half; k <= half; k++) {
-            const j = Math.min(total - 1, Math.max(0, i + k));
-            if (isValidAltitude(altitudes[j])) { sum += altitudes[j]; count++; }
-        }
-        smoothed.push(count > 0 ? sum / count : NaN);
-    }
+    // 1) Suavizado con media móvil centrada de 15 muestras (helper compartido
+    //    con el cálculo de pendiente del GAP).
+    const smoothed = smoothAltitudes(altitudes);
 
     // 2) Histéresis de `threshold` sobre la señal suavizada.
     let gain = 0;
@@ -166,6 +187,88 @@ export const calculateSlidingWindowMaxSpeed = (trackPoints: TrackPoint[], window
         }
     }
     return maxSpeed;
+};
+
+// --- MOTOR DE CÁLCULO FISIOLÓGICO ---
+// Todas las funciones de esta sección son puras: reciben arrays y números y
+// devuelven números (o estructuras simples), sin depender del DOM ni de React.
+
+/**
+ * Factor de coste energético de correr en pendiente según Minetti et al. (2002):
+ *   Cr(i) = 155,4·i^5 − 30,4·i^4 − 43,3·i^3 + 46,3·i^2 + 19,5·i + 3,6  (J/kg/m)
+ * con i = pendiente en fracción (positiva = subida). Devuelve Cr(i)/Cr(0),
+ * de forma que en llano vale 1.
+ *
+ * Origen y límite del modelo: está calibrado con medidas de consumo de oxígeno
+ * en cinta rodante en un rango aproximado de −20 % a +20 %. En pendientes
+ * superiores al 10 % subestima el coste real (el gesto cambia, aparece más
+ * trabajo excéntrico y la cinta no reproduce bien el terreno), así que por
+ * encima de ese rango el dato es orientativo, no una equivalencia exacta.
+ */
+export const minettiCostFactor = (grade: number): number => {
+    if (!Number.isFinite(grade)) return 1;
+    const i = grade;
+    const cr = 155.4 * Math.pow(i, 5)
+        - 30.4 * Math.pow(i, 4)
+        - 43.3 * Math.pow(i, 3)
+        + 46.3 * Math.pow(i, 2)
+        + 19.5 * i
+        + 3.6;
+    // Cr(0) = 3,6 J/kg/m
+    return cr / 3.6;
+};
+
+/**
+ * Ritmo ajustado por pendiente (GAP) en segundos por kilómetro.
+ *
+ * La pendiente no se calcula punto a punto (el ruido del GPS dispararía el
+ * factor) sino sobre la altitud ya suavizada con la media móvil de 15 muestras
+ * y sobre ventanas de 200 m de distancia. Cada ventana se convierte a "tiempo
+ * equivalente en llano" dividiendo su tiempo real por el factor de Minetti, y
+ * el GAP final es el tiempo equivalente total entre la distancia total.
+ *
+ * El factor se recorta por abajo en 0,70 porque en bajadas fuertes el modelo
+ * sobrestima el ahorro (correr cuesta abajo también cuesta) y sin ese suelo el
+ * ritmo ajustado sale irreal.
+ *
+ * @param altitudes altitud en metros (0 = dato ausente, como en el resto de la app)
+ * @param distances distancia acumulada en metros
+ * @param times     instantes en segundos (solo se usan diferencias)
+ * @returns segundos por kilómetro ajustados; 0 si no hay datos suficientes
+ */
+export const calculateGradeAdjustedPace = (altitudes: number[], distances: number[], times: number[]): number => {
+    const n = Math.min(altitudes.length, distances.length, times.length);
+    if (n < 2) return 0;
+
+    const smoothed = smoothAltitudes(altitudes);
+    const WINDOW_METERS = 200;
+    const FACTOR_FLOOR = 0.70;
+
+    let adjustedTime = 0; // segundos equivalentes en llano
+    let totalDistance = 0; // metros
+
+    let start = 0;
+    while (start < n - 1) {
+        let end = start + 1;
+        while (end < n - 1 && distances[end] - distances[start] < WINDOW_METERS) end++;
+
+        const dd = distances[end] - distances[start];
+        const dt = times[end] - times[start];
+        const a0 = smoothed[start];
+        const a1 = smoothed[end];
+
+        if (dd > 0 && dt > 0 && Number.isFinite(a0) && Number.isFinite(a1)) {
+            const grade = (a1 - a0) / dd;
+            const factor = Math.max(FACTOR_FLOOR, minettiCostFactor(grade));
+            adjustedTime += dt / factor;
+            totalDistance += dd;
+        }
+
+        start = end;
+    }
+
+    if (totalDistance <= 0) return 0;
+    return (adjustedTime / totalDistance) * 1000;
 };
 
 export const calculateACSMVo2 = (trackPoints: TrackPoint[], maxHr: number, restHr: number = 60): number => {

@@ -10,7 +10,29 @@
 //
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { formatMetric, calculateElevationGain, calculateSlidingWindowMaxSpeed } from '../utils.ts';
+import {
+    formatMetric,
+    calculateElevationGain,
+    calculateSlidingWindowMaxSpeed,
+    calculateGradeAdjustedPace,
+} from '../utils.ts';
+
+// --- Utilidades de los tests ---
+
+// Ritmo en formato m:ss truncando los segundos (276,6 s → 4:36). Es el mismo
+// criterio con el que el encargo expresó los valores esperados.
+const paceLabel = (secondsPerKm: number) => {
+    const total = Math.floor(secondsPerKm);
+    const m = Math.floor(total / 60);
+    const s = total % 60;
+    return `${m}:${s < 10 ? '0' + s : s}`;
+};
+
+const assertClose = (actual: number, expected: number, tolerance: number, message: string) => {
+    assert.ok(Math.abs(actual - expected) <= tolerance, `${message}: esperaba ${expected}, obtuve ${actual}`);
+};
+
+// --- Formato y desnivel (tests previos) ---
 
 test('formatMetric redondea a 0 decimales por defecto', () => {
     assert.equal(formatMetric(59233.491416000004), '59233');
@@ -89,4 +111,59 @@ test('calculateSlidingWindowMaxSpeed tolera relojes que no muestrean a 1 Hz', ()
     assert.ok(speed > 4.9 && speed < 5.1, `esperaba ~5 m/s, obtuve ${speed}`);
 });
 
+// --- TAREA 1: ritmo ajustado por pendiente (GAP) ---
+//
+// Caso base: 11 muestras cada 100 m (0 a 1000 m) y 36 s por cada 100 m, es
+// decir 6:00/km reales. La altitud sube o baja de forma lineal con la pendiente
+// pedida. El factor de Minetti esperado se obtiene de Cr(i)/Cr(0).
+const gapDistances = Array.from({ length: 11 }, (_, i) => i * 100);
+const gapTimes = gapDistances.map(d => (d / 100) * 36);
+const gapForGrade = (grade: number) => {
+    const altitudes = gapDistances.map(d => 100 + d * grade);
+    return calculateGradeAdjustedPace(altitudes, gapDistances, gapTimes);
+};
 
+test('GAP en llano no cambia el ritmo y deja el factor en 1', () => {
+    const gap = gapForGrade(0);
+    assertClose(gap, 360, 0.01, 'GAP a 0 %');
+    assert.equal(paceLabel(gap), '6:00');
+    assertClose(360 / gap, 1.0, 1e-9, 'factor a 0 %');
+});
+
+test('GAP a +5 % da 4:36/km con factor 1,301', () => {
+    const gap = gapForGrade(0.05);
+    assertClose(gap, 276.616, 0.01, 'GAP a +5 %');
+    assert.equal(paceLabel(gap), '4:36');
+    assertClose(360 / gap, 1.301443, 1e-5, 'factor a +5 %');
+});
+
+test('GAP a −5 % da 7:51/km con factor 0,763', () => {
+    const gap = gapForGrade(-0.05);
+    assertClose(gap, 471.972, 0.01, 'GAP a −5 %');
+    assert.equal(paceLabel(gap), '7:51');
+    assertClose(360 / gap, 0.762757, 1e-5, 'factor a −5 %');
+});
+
+test('GAP a +10,8 % da 3:29/km con factor 1,719', () => {
+    const gap = gapForGrade(0.108);
+    assertClose(gap, 209.382, 0.01, 'GAP a +10,8 %');
+    assert.equal(paceLabel(gap), '3:29');
+    assertClose(360 / gap, 1.719345, 1e-5, 'factor a +10,8 %');
+});
+
+test('GAP a −15 % recorta el factor al suelo 0,70 y da 8:34/km', () => {
+    const gap = gapForGrade(-0.15);
+    // Sin suelo, el modelo de Minetti daría un factor de 0,510 y un GAP irreal.
+    assertClose(360 / gap, 0.70, 1e-9, 'factor recortado a −15 %');
+    assertClose(gap, 514.286, 0.01, 'GAP a −15 %');
+    assert.equal(paceLabel(gap), '8:34');
+});
+
+test('GAP tolera huecos de altitud (0) sin romper el cálculo', () => {
+    // Con un hueco en una muestra, la ventana que lo toca se descarta y el resto
+    // se sigue acumulando: el GAP no debe salir 0 ni NaN.
+    const altitudes = gapDistances.map(d => 100 + d * 0.05);
+    altitudes[5] = 0;
+    const gap = calculateGradeAdjustedPace(altitudes, gapDistances, gapTimes);
+    assert.ok(Number.isFinite(gap) && gap > 0, `esperaba un GAP finito, obtuve ${gap}`);
+});
