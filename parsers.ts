@@ -25,6 +25,18 @@ const calculateStride = (speedMps: number, cadenceSpm: number): number => {
     return 0;
 };
 
+// Busca el primer campo numérico de desnivel positivo entre los nombres que
+// usan las distintas exportadoras (Polar y otras), porque no hay un estándar.
+const pickDeviceElevationGain = (obj: any): number | null => {
+    if (!obj || typeof obj !== 'object') return null;
+    const keys = ['totalAscent', 'total_ascent', 'ascent', 'elevationGain', 'elevation_gain', 'totalElevationGain', 'total_elevation_gain'];
+    for (const key of keys) {
+        const value = obj[key];
+        if (typeof value === 'number' && Number.isFinite(value)) return value;
+    }
+    return null;
+};
+
 export const parseCsv = (text: string, filename: string): Session => {
     const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
     if (lines.length < 2) throw new Error("CSV vacío o inválido");
@@ -35,7 +47,12 @@ export const parseCsv = (text: string, filename: string): Session => {
     const lonIdx = findCol(['lon', 'long', 'position_long']);
     const hrIdx = findCol(['heart', 'hr', 'frecuencia', 'bpm']);
     const speedIdx = findCol(['speed', 'velocidad']);
-    const altIdx = findCol(['alt', 'ele', 'height']);
+    // Desnivel ya calculado por el dispositivo, si el CSV lo exporta como
+    // columna propia (evita tener que estimarlo desde el stream de altitud).
+    const gainIdx = findCol(['total_ascent', 'total_elevation_gain', 'elevation_gain', 'elevation gain', 'desnivel', 'ascent', 'gain']);
+    // La columna de altitud no debe confundirse con la de desnivel, que muchas
+    // veces contiene "ele"/"elevation" en el nombre.
+    const altIdx = header.findIndex((h, idx) => idx !== gainIdx && ['alt', 'ele', 'height'].some(name => h.includes(name)));
     const distIdx = findCol(['dist']);
     const cadIdx = findCol(['cadence', 'cad', 'rpm', 'spm']); 
 
@@ -44,6 +61,9 @@ export const parseCsv = (text: string, filename: string): Session => {
     let startTimeStr = '';
     let maxHr = 0; let sumHr = 0; let validHrCount = 0; let cumDist = 0;
     let sumCad = 0; let countCad = 0; let sumStride = 0; let countStride = 0;
+    // Último desnivel positivo exportado por el dispositivo en el CSV.
+    let deviceGain = 0;
+    let hasDeviceGain = false;
 
     // Control de última posición válida
     let lastLat = 0;
@@ -64,6 +84,13 @@ export const parseCsv = (text: string, filename: string): Session => {
 
         if (hr > 0) { if (hr > maxHr) maxHr = hr; sumHr += hr; validHrCount++; }
         if (cad > 0) { sumCad += cad; countCad++; }
+        if (gainIdx !== -1) {
+            const rawGain = cols[gainIdx];
+            if (rawGain !== undefined && rawGain !== '') {
+                const g = parseFloat(rawGain);
+                if (Number.isFinite(g)) { deviceGain = g; hasDeviceGain = true; }
+            }
+        }
         
         let stride = 0;
         const speedMps = speed > 20 ? speed / 3.6 : speed; 
@@ -99,8 +126,9 @@ export const parseCsv = (text: string, filename: string): Session => {
 
         trackPoints.push({ lat: currentLat, lon: currentLon, timestamp, hr, speed: speedMps * 3.6, altitude: currentAlt, dist: cumDist, cadence: cad, strideLength: stride });
     }
-    // Desnivel positivo con histéresis de 1 m para no sumar el ruido del altímetro
-    const totalElevationGain = calculateElevationGain(trackPoints.map(p => p.altitude));
+    // El desnivel del dispositivo manda. Solo si el CSV no lo trae se estima a
+    // partir del stream de altitud (media móvil de 15 + histéresis de 0,5 m).
+    const totalElevationGain = hasDeviceGain ? deviceGain : calculateElevationGain(trackPoints.map(p => p.altitude));
     const duration = trackPoints.length > 1 ? (new Date(trackPoints[trackPoints.length-1].timestamp).getTime() - new Date(startTimeStr).getTime()) / 1000 : 0;
     
     const vam6min = calculateSlidingWindowMaxSpeed(trackPoints, 360);
@@ -172,8 +200,10 @@ export const parsePolarJson = (json: any, filename: string): Session => {
         trackPoints.push({ lat: lat, lon: lon, timestamp:  new Date(new Date(startTime).getTime() + i * 1000).toISOString(), hr: hrVal, speed: speedVal, altitude: altVal, dist: cumDist, cadence: cadVal, strideLength: stride });
     }
     if (trackPoints.length === 0) { return { id: `polar-stub`, name: 'Polar Import', startTime: new Date().toISOString(), duration: 0, distance: 0, sport: 'OTHER', avgHr: 0, maxHr: 0, calories: 0, totalElevationGain: 0, avgCadence: 0, vam6min: 0, best20minSpeed: 0, acsmVo2Max: 0, trackPoints: [], trimp: 0, climbScore: 0 }; }
-    // Desnivel positivo con histéresis de 1 m para no sumar el ruido del altímetro
-    const totalAscent = calculateElevationGain(trackPoints.map(p => p.altitude));
+    // El desnivel del dispositivo manda; solo si el JSON no lo trae se estima
+    // a partir del stream de altitud.
+    const deviceGain = pickDeviceElevationGain(exercise) ?? pickDeviceElevationGain(json);
+    const totalAscent = deviceGain !== null ? deviceGain : calculateElevationGain(trackPoints.map(p => p.altitude));
     const sport = exercise.sport || 'RUNNING'; const distance = exercise.distance || cumDist; const finalMaxHr = exercise.heartRate?.maximum || maxHr;
     
     const vam6min = calculateSlidingWindowMaxSpeed(trackPoints, 360);
@@ -354,8 +384,9 @@ export const parseFitData = (arrayBuffer: ArrayBuffer, filename: string): Promis
                         const hr = curr.heart_rate || curr.heart_rate_bpm || 0; 
                         if (hr > 0) { if (hr > maxHr) maxHr = hr; hrSum += hr; hrCount++; }
                         
-                        // La altitud se guarda tal cual; el desnivel positivo se calcula al final
-                        // con histéresis de 1 m (calculateElevationGain) para no sumar ruido del altímetro.
+                        // La altitud se guarda tal cual; el desnivel positivo lo
+                        // aporta la sesión del FIT (total_ascent) y solo se estima
+                        // si el fichero no lo trae.
                         let alt = curr.enhanced_altitude ?? curr.altitude ?? 0; 
                         
                         const cad = curr.cadence || 0; 
@@ -387,8 +418,12 @@ export const parseFitData = (arrayBuffer: ArrayBuffer, filename: string): Promis
                             verticalRatio: vertRatio
                         });
                     }
-                    // Desnivel positivo con histéresis de 1 m para no sumar el ruido del altímetro
-                    const calculatedAscent = calculateElevationGain(trackPoints.map(p => p.altitude));
+                    // El desnivel que trae la sesión FIT (total_ascent del
+                    // barómetro del dispositivo) manda. Solo si falta se estima
+                    // desde el stream de altitud.
+                    const calculatedAscent = sessionData?.total_ascent != null
+                        ? null
+                        : calculateElevationGain(trackPoints.map(p => p.altitude));
                     let sport = 'OTHER'; if (sessionData?.sport) sport = sessionData.sport.toUpperCase();
                     
                     let acsmVo2Max = calculateACSMVo2(trackPoints, maxHr || DEFAULT_MAX_HR, DEFAULT_REST_HR);
@@ -411,7 +446,7 @@ export const parseFitData = (arrayBuffer: ArrayBuffer, filename: string): Promis
                     if (!calculatedCalories) { calculatedCalories = Math.round(duration / 60 * 10); }
 
                     const avgHr = sessionData?.avg_heart_rate || (hrCount > 0 ? Math.round(hrSum / hrCount) : 0); const finalMaxHr = sessionData?.max_heart_rate || maxHr;
-                    const finalAscent = sessionData?.total_ascent ?? Math.round(calculatedAscent); const finalAvgCadence = sessionData?.avg_cadence ?? (cadenceCount > 0 ? Math.round(cadenceSum / cadenceCount) : 0);
+                    const finalAscent = sessionData?.total_ascent != null ? sessionData.total_ascent : Math.round(calculatedAscent ?? 0); const finalAvgCadence = sessionData?.avg_cadence ?? (cadenceCount > 0 ? Math.round(cadenceSum / cadenceCount) : 0);
                     
                     const avgStride = sessionData?.avg_step_length ? sessionData.avg_step_length / 1000 : (strideCount > 0 ? strideSum / strideCount : 0);
                     const avgStance = sessionData?.avg_stance_time || (stanceCount > 0 ? stanceSum / stanceCount : 0);

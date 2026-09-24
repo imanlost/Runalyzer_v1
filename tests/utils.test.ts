@@ -33,7 +33,7 @@ test('formatMetric es tolerante a valores inválidos o no numéricos', () => {
     assert.equal(formatMetric({}), '--');
 });
 
-test('calculateElevationGain ignora las oscilaciones del altímetro por debajo de 1 m', () => {
+test('calculateElevationGain suaviza el ruido del altímetro y da 0 en terreno llano', () => {
     // Ruido de ±0.3 m alrededor de una altitud fija no debe acumular nada
     assert.equal(calculateElevationGain([100, 100.3, 99.8, 100.2, 99.9, 100.1]), 0);
     // Los huecos de altitud (0) se ignoran como dato ausente
@@ -42,14 +42,25 @@ test('calculateElevationGain ignora las oscilaciones del altímetro por debajo d
     assert.equal(calculateElevationGain([0, 0, 100, 100.4]), 0);
 });
 
-test('calculateElevationGain acumula el desnivel neto real', () => {
-    // Subida gradual de 0 a 10 m en pasos de 0.5 m: debe dar 10, no 0 ni más
-    const climb = Array.from({ length: 21 }, (_, i) => 100 + i * 0.5);
-    assert.equal(calculateElevationGain(climb), 10);
-    // Subida y bajada: solo cuenta la parte positiva
-    assert.equal(calculateElevationGain([100, 105, 95]), 5);
-    // Terreno ondulado: se cuentan las dos subidas reales separadas por un descenso
-    assert.equal(calculateElevationGain([100, 105, 95, 100]), 10);
+test('calculateElevationGain ignora un pico aislado gracias al suavizado de 15 muestras', () => {
+    // Un único pico de +5 m se reparte entre las 15 muestras de la media móvil
+    // (aporta 5/15 ≈ 0.33 m) y queda por debajo de la histéresis de 0,5 m.
+    const spike = Array.from({ length: 20 }, (_, i) => (i === 10 ? 105 : 100));
+    assert.equal(calculateElevationGain(spike), 0);
+});
+
+test('calculateElevationGain acumula el desnivel neto real descartando el ruido', () => {
+    // Subida neta de 10 m a lo largo de 201 muestras con ruido de ±0.4 m.
+    // El cálculo punto a punto infla el desnivel (~49 m); con el suavizado
+    // previo + histéresis de 0,5 m queda pegado al neto real.
+    const noisyClimb = Array.from({ length: 201 }, (_, i) => 100 + i * 0.05 + 0.4 * Math.sin(i * 2.1));
+    let pointToPoint = 0;
+    for (let i = 1; i < noisyClimb.length; i++) {
+        if (noisyClimb[i] > noisyClimb[i - 1]) pointToPoint += noisyClimb[i] - noisyClimb[i - 1];
+    }
+    const gain = calculateElevationGain(noisyClimb);
+    assert.ok(gain > 9 && gain < 10.5, `esperaba ~10 m, obtuve ${gain}`);
+    assert.ok(gain < pointToPoint / 2, `el suavizado debería bajar de ${pointToPoint}, obtuve ${gain}`);
 });
 
 test('calculateSlidingWindowMaxSpeed exige la ventana completa', () => {

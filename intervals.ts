@@ -1,5 +1,5 @@
 import { Session, TrackPoint } from './types';
-import { calculateTRIMP, calculateACSMVo2, calculateClimbScore, calculateAverageStrideLength, calculateSlidingWindowMaxSpeed } from './utils';
+import { calculateTRIMP, calculateACSMVo2, calculateClimbScore, calculateAverageStrideLength, calculateSlidingWindowMaxSpeed, calculateElevationGain } from './utils';
 
 import { fetchWeatherForSession } from './utils';
 
@@ -124,7 +124,10 @@ export const importFromIntervals = async (athleteId: string, apiKey: string, onP
                 avgHr: avgHr,
                 maxHr: maxHr,
                 calories: Math.round(act.calories || Math.round((duration/60) * 12)),
-                totalElevationGain: Math.round(act.total_elevation_gain || 0),
+                // El desnivel que ya calcula intervals.icu para la actividad
+                // (total_elevation_gain) manda. Solo si no llega se estima desde
+                // el stream de altitud.
+                totalElevationGain: Math.round(act.total_elevation_gain != null ? act.total_elevation_gain : calculateElevationGain(trackPoints.map(p => p.altitude))),
                 avgCadence: act.average_cadence || 0,
                 vam6min: vam6min, 
                 best20minSpeed: 0,

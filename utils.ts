@@ -85,23 +85,55 @@ export const calculateClimbScore = (gain: number, distanceMeters: number): numbe
 };
 
 /**
- * Acumula desnivel positivo con histéresis de 1 metro.
+ * Estima el desnivel positivo a partir del stream de altitud.
  *
- * El altímetro oscila de forma natural (~30 cm entre muestras). Si se suma cada
- * incremento punto a punto, cada oscilación cuenta como subida y el desnivel
- * queda muy por encima del real (el que da intervals.icu). Con 1 m de umbral:
- * - Se descarta el ruido del altímetro, que casi nunca llega a ese metro.
- * - Solo se acumula el cambio neto cuando la altitud supera la referencia en
- *   1 m o más; en ese momento la referencia pasa a ser la nueva altitud.
- * - En los descensos de más de 1 m la referencia también baja, para que las
- *   subidas repetidas en terreno ondulado se cuenten.
- * La altitud 0 se trata como ausente (centinela habitual de los GPS).
+ * IMPORTANTE: esto es solo un RESPALDO para fuentes que no traen un desnivel ya
+ * calculado por el dispositivo (el `total_ascent` de la sesión FIT, el
+ * `total_elevation_gain` de intervals.icu o su equivalente en CSV/Polar). Si la
+ * fuente lo trae, ese valor manda y no se debe llamar a esta función.
+ *
+ * Por qué se suaviza antes de aplicar la histéresis:
+ * - El altímetro oscila de forma natural (~30 cm entre muestras) y, si se suma
+ *   cada incremento punto a punto, cada micro-oscilación cuenta como subida y
+ *   el desnivel se dispara. Una media móvil centrada de 15 muestras elimina ese
+ *   ruido de alta frecuencia sin desvirtuar las pendientes reales, que son
+ *   mucho más lentas.
+ * - Sobre la señal ya suavizada se aplica una histéresis de 0,5 m: solo se
+ *   acumula el cambio cuando la altitud supera la referencia en 0,5 m o más; en
+ *   los descensos la referencia baja igual, para no perder las subidas repetidas
+ *   del terreno ondulado.
+ * - La altitud 0 se trata como ausente (centinela habitual de los GPS) y no
+ *   entra ni en la media ni en la histéresis.
+ *
+ * Es una aproximación: sin el dato del dispositivo no es posible reproducir el
+ * desnivel del barómetro del reloj.
  */
-export const calculateElevationGain = (altitudes: number[], threshold: number = 1): number => {
+export const calculateElevationGain = (altitudes: number[], threshold: number = 0.5): number => {
+    const isValidAltitude = (alt: number) => typeof alt === 'number' && Number.isFinite(alt) && alt !== 0;
+
+    // 1) Suavizado con media móvil centrada de 15 muestras. En los extremos se
+    // replica el valor más cercano para que la ventana tenga siempre 15 muestras
+    // y un pico aislado no pese de más. Los huecos (0 o valores no finitos) no
+    // cuentan en la media y dejan la muestra como ausente.
+    const windowSize = 15;
+    const half = Math.floor(windowSize / 2);
+    const total = altitudes.length;
+    const smoothed: number[] = [];
+    for (let i = 0; i < total; i++) {
+        let sum = 0;
+        let count = 0;
+        for (let k = -half; k <= half; k++) {
+            const j = Math.min(total - 1, Math.max(0, i + k));
+            if (isValidAltitude(altitudes[j])) { sum += altitudes[j]; count++; }
+        }
+        smoothed.push(count > 0 ? sum / count : NaN);
+    }
+
+    // 2) Histéresis de `threshold` sobre la señal suavizada.
     let gain = 0;
     let ref: number | null = null;
-    for (const alt of altitudes) {
-        if (typeof alt !== 'number' || !Number.isFinite(alt) || alt === 0) continue;
+    for (const alt of smoothed) {
+        if (!Number.isFinite(alt)) continue;
         if (ref === null) { ref = alt; continue; }
         if (alt >= ref + threshold) {
             gain += alt - ref;
