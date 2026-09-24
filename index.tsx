@@ -9,7 +9,6 @@ import { importFromIntervals } from './intervals';
 import { CalendarWidget, NotificationToast, ProfileModal, SummaryItem, MetricCard, RpeInputWidget } from './components';
 import { 
     AdvancedAnalytics, 
-    TrendAnalysis, 
     RecoveryAdvisor, 
     IntensityDistribution, 
     GlobalHeatmap, 
@@ -467,7 +466,6 @@ const App = () => {
             {dashboardTab === 'overview' && (
                 <>
                     <AggregatedStats sessions={sessions as any} />
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6"><WeeklyVolumeChart sessions={sessions as any} /></div>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-4"><RacePredictor sessions={sessions as any} onShowInfo={() => handleShowInfo('riegel')} /></div>
                     {sessions.length > 0 && (<div className="mt-4"><RecentActivitiesList sessions={sessions as any} onSelectSession={handleSelectSession} /></div>)}
                 </>
@@ -476,17 +474,17 @@ const App = () => {
                 <>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                         <RecoveryAdvisor sessions={sessions as any} onShowInfo={() => handleShowInfo('recovery')} />
-                        <IntensityDistribution sessions={sessions as any} profile={userProfile} onShowInfo={() => handleShowInfo('polarized')} />
                         <InjuryPreventionCard sessions={sessions as any} />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-4"><AdvancedAnalytics sessions={sessions as any} profile={userProfile} onShowInfo={handleShowInfo} /></div>
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-4"><PersonalRecords sessions={sessions as any} /></div>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mt-4"><FitnessTrendChart sessions={sessions as any} /></div>
                 </>
             )}
             {dashboardTab === 'trends' && (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <TrendAnalysis sessions={sessions as any} profile={userProfile} />
+                <div className="space-y-6">
+                    <FitnessTrendChart sessions={sessions as any} />
+                    <WeeklyVolumeChart sessions={sessions as any} />
+                    <IntensityDistribution sessions={sessions as any} profile={userProfile} onShowInfo={() => handleShowInfo('polarized')} />
                 </div>
             )}
             {dashboardTab === 'heatmap' && (
