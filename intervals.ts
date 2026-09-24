@@ -1,5 +1,5 @@
 import { Session, TrackPoint } from './types';
-import { calculateTRIMP, calculateACSMVo2, calculateClimbScore, calculateAverageStrideLength } from './utils';
+import { calculateTRIMP, calculateACSMVo2, calculateClimbScore, calculateAverageStrideLength, calculateSlidingWindowMaxSpeed } from './utils';
 
 import { fetchWeatherForSession } from './utils';
 
@@ -111,6 +111,9 @@ export const importFromIntervals = async (athleteId: string, apiKey: string, onP
             const avgHr = validHrs.length > 0 ? Math.round(validHrs.reduce((a,b)=>a+b,0)/validHrs.length) : Math.round(act.average_heartrate || 0);
             const maxHr = validHrs.length > 0 ? Math.max(...validHrs) : (act.max_heartrate || 0);
 
+            // VAM: mejor ventana deslizante de 6 minutos con los streams ya descargados
+            const vam6min = calculateSlidingWindowMaxSpeed(trackPoints, 360);
+
             const session: Session = {
                 id: `intervals-${act.id}`,
                 name: act.name,
@@ -123,7 +126,7 @@ export const importFromIntervals = async (athleteId: string, apiKey: string, onP
                 calories: Math.round(act.calories || Math.round((duration/60) * 12)),
                 totalElevationGain: Math.round(act.total_elevation_gain || 0),
                 avgCadence: act.average_cadence || 0,
-                vam6min: 0, 
+                vam6min: vam6min, 
                 best20minSpeed: 0,
                 acsmVo2Max: 0,
                 trimp: act.icu_training_load || 0,

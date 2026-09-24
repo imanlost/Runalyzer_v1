@@ -10,7 +10,7 @@
 //
 import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { formatMetric, calculateElevationGain } from '../utils.ts';
+import { formatMetric, calculateElevationGain, calculateSlidingWindowMaxSpeed } from '../utils.ts';
 
 test('formatMetric redondea a 0 decimales por defecto', () => {
     assert.equal(formatMetric(59233.491416000004), '59233');
@@ -51,4 +51,16 @@ test('calculateElevationGain acumula el desnivel neto real', () => {
     // Terreno ondulado: se cuentan las dos subidas reales separadas por un descenso
     assert.equal(calculateElevationGain([100, 105, 95, 100]), 10);
 });
+
+test('calculateSlidingWindowMaxSpeed exige la ventana completa', () => {
+    // Los primeros 324 s a 5 m/s y el resto hasta 360 s a 0.5 m/s.
+    // La ventana de 324 s daría 5 m/s, pero la de 360 s da 4.55 m/s.
+    const trackPoints = Array.from({ length: 361 }, (_, t) => ({
+        lat: 0, lon: 0, timestamp: new Date(t * 1000).toISOString(), hr: 0,
+        speed: 0, altitude: 0, dist: t <= 324 ? t * 5 : 324 * 5 + (t - 324) * 0.5, cadence: 0
+    }));
+    const speed = calculateSlidingWindowMaxSpeed(trackPoints, 360);
+    assert.ok(speed > 4.5 && speed < 4.6, `esperaba ~4.55 m/s, obtuve ${speed}`);
+});
+
 
