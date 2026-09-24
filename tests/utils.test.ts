@@ -15,6 +15,8 @@ import {
     calculateElevationGain,
     calculateSlidingWindowMaxSpeed,
     calculateGradeAdjustedPace,
+    calculateEfficiencyFactor,
+    calculateDecoupling,
 } from '../utils.ts';
 
 // --- Utilidades de los tests ---
@@ -166,4 +168,47 @@ test('GAP tolera huecos de altitud (0) sin romper el cálculo', () => {
     altitudes[5] = 0;
     const gap = calculateGradeAdjustedPace(altitudes, gapDistances, gapTimes);
     assert.ok(Number.isFinite(gap) && gap > 0, `esperaba un GAP finito, obtuve ${gap}`);
+});
+
+// --- TAREA 2: eficiencia aeróbica y decoupling ---
+//
+// 200 muestras a 1 s, altitud y pendiente 0.
+const efTimes = Array.from({ length: 200 }, (_, i) => i);
+const efConstantHr = (hr: number) => new Array(200).fill(hr);
+const efConstantDist = (speed: number) => efTimes.map(t => t * speed);
+// Distancia de la sesión mixta: primera mitad a 3,0 m/s y segunda a 2,7 m/s.
+const mixedDist = efTimes.map(t => (t < 100 ? t * 3.0 : 300 + (t - 100) * 2.7));
+
+test('calculateEfficiencyFactor da 1,20 m/min/bpm con velocidad y FC constantes', () => {
+    const ef = calculateEfficiencyFactor(efConstantDist(3.0), efTimes, efConstantHr(150));
+    assertClose(ef, 1.20, 1e-9, 'EF constante');
+});
+
+test('calculateDecoupling da 10,0 % si la velocidad cae un 10 % con la misma FC', () => {
+    const decoupling = calculateDecoupling(
+        new Array(200).fill(0), mixedDist, efTimes, efConstantHr(150)
+    );
+    assertClose(decoupling, 10.0, 1e-9, 'decoupling con FC constante');
+});
+
+test('calculateDecoupling da 0,0 % si la FC cae en la misma proporción que la velocidad', () => {
+    const hr = efTimes.map(t => (t < 100 ? 150 : 135));
+    const decoupling = calculateDecoupling(new Array(200).fill(0), mixedDist, efTimes, hr);
+    assertClose(decoupling, 0.0, 1e-9, 'decoupling de control');
+});
+
+test('calculateEfficiencyFactor descarta una sesión con pendiente al 5 %', () => {
+    // Altitud coherente con la pendiente: todos los tramos quedan fuera de
+    // −2 %/+2 %, así que no hay ningún tramo válido y la EF es 0.
+    const altitudes = efTimes.map(t => 100 + t * 3.0 * 0.05);
+    const ef = calculateEfficiencyFactor(efConstantDist(3.0), efTimes, efConstantHr(150), altitudes);
+    assert.equal(ef, 0);
+});
+
+test('calculateEfficiencyFactor descarta los puntos con velocidad o FC cero', () => {
+    // Media sesión parada (velocidad 0) y la otra con FC 0: no debe quedar
+    // ningún tramo válido.
+    const dist = efTimes.map(t => (t < 100 ? 0 : (t - 100) * 3.0));
+    const ef = calculateEfficiencyFactor(dist, efTimes, new Array(200).fill(0));
+    assert.equal(ef, 0);
 });

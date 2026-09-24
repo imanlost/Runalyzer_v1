@@ -271,6 +271,114 @@ export const calculateGradeAdjustedPace = (altitudes: number[], distances: numbe
     return (adjustedTime / totalDistance) * 1000;
 };
 
+interface EfficiencySegment {
+    startTime: number; // instante de inicio del tramo
+    time: number;      // instante de cierre del tramo
+    distance: number;  // metros del tramo
+    duration: number;  // segundos del tramo
+    hr: number;        // FC al inicio del tramo
+}
+
+/**
+ * Construye los tramos válidos para el cálculo de eficiencia a partir de los
+ * arrays crudos. Un tramo es válido si su duración y distancia son positivas
+ * (velocidad > 0) y su FC es distinta de cero. Si se pasa la altitud, también
+ * se descartan los tramos con pendiente fuera de −2 % y +2 %, porque en
+ * pendiente la relación velocidad/FC deja de ser comparable entre sesiones.
+ *
+ * La FC del tramo se toma en su instante inicial: así el tramo que cruza el
+ * corte entre mitades conserva el estado de la mitad a la que pertenece por su
+ * velocidad y no arrastra la FC de la mitad siguiente.
+ */
+const buildEfficiencySegments = (
+    distances: number[],
+    times: number[],
+    heartrates: number[],
+    altitudes?: number[]
+): EfficiencySegment[] => {
+    const n = Math.min(distances.length, times.length, heartrates.length, altitudes ? altitudes.length : Infinity);
+    const useGrade = !!altitudes && altitudes.length >= n;
+    const segments: EfficiencySegment[] = [];
+
+    for (let i = 1; i < n; i++) {
+        const duration = times[i] - times[i - 1];
+        const distance = distances[i] - distances[i - 1];
+        const hr = heartrates[i - 1];
+        if (!(duration > 0) || !(distance > 0) || !(hr > 0)) continue;
+        if (useGrade) {
+            const grade = (altitudes![i] - altitudes![i - 1]) / distance;
+            if (grade < -0.02 || grade > 0.02) continue;
+        }
+        segments.push({ startTime: times[i - 1], time: times[i], distance, duration, hr });
+    }
+
+    return segments;
+};
+
+/** Eficiencia aeróbica (m/min/bpm) de un conjunto de tramos ya filtrados. */
+const efficiencyFromSegments = (segments: EfficiencySegment[]): number => {
+    if (segments.length === 0) return 0;
+    let totalDistance = 0;
+    let totalDuration = 0;
+    let totalHr = 0;
+    for (const s of segments) {
+        totalDistance += s.distance;
+        totalDuration += s.duration;
+        totalHr += s.hr;
+    }
+    if (!(totalDuration > 0)) return 0;
+    const speedMmin = (totalDistance / totalDuration) * 60;
+    const avgHr = totalHr / segments.length;
+    return avgHr > 0 ? speedMmin / avgHr : 0;
+};
+
+/**
+ * Eficiencia aeróbica: velocidad media en m/min dividida por la FC media
+ * (m/min/bpm). Aplica los filtros de velocidad cero/FC cero y, si se pasa la
+ * altitud, descarta los tramos con pendiente fuera de −2 % / +2 %.
+ */
+export const calculateEfficiencyFactor = (
+    distances: number[],
+    times: number[],
+    heartrates: number[],
+    altitudes?: number[]
+): number => {
+    return efficiencyFromSegments(buildEfficiencySegments(distances, times, heartrates, altitudes));
+};
+
+/**
+ * Decoupling cardíaco: porcentaje de pérdida de eficiencia entre la primera y
+ * la segunda mitad de la sesión, partidas por tiempo:
+ *   (EF1 − EF2) / EF1 × 100
+ * Un valor positivo indica deriva (la FC sube o la velocidad baja en la segunda
+ * mitad). Devuelve 0 si no hay datos suficientes.
+ */
+export const calculateDecoupling = (
+    altitudes: number[],
+    distances: number[],
+    times: number[],
+    heartrates: number[]
+): number => {
+    const n = Math.min(altitudes.length, distances.length, times.length, heartrates.length);
+    if (n < 2) return 0;
+
+    const segments = buildEfficiencySegments(distances, times, heartrates, altitudes);
+    if (segments.length === 0) return 0;
+
+    // Cada tramo se asigna a una mitad por su punto medio temporal, no por su
+    // instante de cierre: el tramo que cruza el corte no debe caer entero en la
+    // segunda mitad, porque desequilibraría la comparación (con 200 muestras de
+    // 1 s y velocidades constantes por mitad, el corte cae justo entre ambas).
+    const midTime = (times[0] + times[n - 1]) / 2;
+    const firstHalf = segments.filter(s => (s.startTime + s.time) / 2 <= midTime);
+    const secondHalf = segments.filter(s => (s.startTime + s.time) / 2 > midTime);
+
+    const ef1 = efficiencyFromSegments(firstHalf);
+    const ef2 = efficiencyFromSegments(secondHalf);
+    if (!(ef1 > 0)) return 0;
+    return ((ef1 - ef2) / ef1) * 100;
+};
+
 export const calculateACSMVo2 = (trackPoints: TrackPoint[], maxHr: number, restHr: number = 60): number => {
     if (!trackPoints || trackPoints.length < 300) return 0;
 
