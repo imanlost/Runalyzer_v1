@@ -14,6 +14,7 @@ import {
     GlobalHeatmap, 
     PersonalRecords, 
     FitnessTrendChart, 
+    PaceAtFixedHrChart,
     RacePredictor, 
     WeeklyVolumeChart, 
     AggregatedStats, 
@@ -485,6 +486,7 @@ const App = () => {
                     <FitnessTrendChart sessions={sessions as any} />
                     <WeeklyVolumeChart sessions={sessions as any} />
                     <IntensityDistribution sessions={sessions as any} profile={userProfile} onShowInfo={() => handleShowInfo('polarized')} />
+                    <PaceAtFixedHrChart sessions={sessions as any} />
                 </div>
             )}
             {dashboardTab === 'heatmap' && (

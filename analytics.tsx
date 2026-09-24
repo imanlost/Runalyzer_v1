@@ -4,7 +4,7 @@ import L from 'leaflet';
 import { Session, UserProfile, TrackPoint, DailyFitness } from './types';
 import { Icons, getSportConfig } from './icons';
 import { InfoTooltip, MetricCard } from './components';
-import { calculateGlobalVo2Max, formatPace, formatTime, formatMetric, calculateIndividualizedK, calculateACWR, getWeekStartMonday } from './utils';
+import { calculateGlobalVo2Max, formatPace, formatTime, formatMetric, calculateIndividualizedK, calculateACWR, getWeekStartMonday, smoothAltitudes, getMonthName } from './utils';
 import { getAllSessionsFromDB, getFullSessionFromDB } from './db'; 
 
 // --- COMPONENTES AUXILIARES PARA ANALYTICS ---
@@ -928,6 +928,145 @@ export const FitnessTrendChart = ({ sessions }: { sessions: Session[] }) => {
                      <span className="text-gray-400 font-bold">Forma (TSB)</span>
                  </div>
              </div>
+        </div>
+    );
+};
+
+/**
+ * Ritmo a pulso fijo: por cada mes natural, el ritmo medio ponderado por tiempo
+ * de los tramos llanos (pendiente entre −2 % y +2 % sobre la altitud suavizada)
+ * con FC entre 145 y 155 lpm. Es el indicador honesto de progreso aeróbico: a la
+ * misma FC, si el ritmo baja (más rápido), la forma mejora.
+ */
+export const PaceAtFixedHrChart = ({ sessions }: { sessions: Session[] }) => {
+    const [fullData, setFullData] = useState<Session[]>([]);
+    const [loading, setLoading] = useState(false);
+
+    const runSessions = useMemo(
+        () => sessions.filter(s => (s.sport === 'RUNNING' || s.sport === 'TRAIL_RUNNING') && s.distance > 0),
+        [sessions]
+    );
+
+    useEffect(() => {
+        if (runSessions.length === 0) { setFullData([]); return; }
+        const needsLoading = runSessions.some(s => !s.trackPoints || s.trackPoints.length === 0);
+        if (needsLoading) {
+            setLoading(true);
+            Promise.all(runSessions.map(s => getFullSessionFromDB(s.id))).then(results => {
+                setFullData(results.filter((s): s is Session => !!s));
+                setLoading(false);
+            }).catch(() => setLoading(false));
+        } else {
+            setFullData(runSessions as Session[]);
+        }
+    }, [runSessions]);
+
+    const months = useMemo(() => {
+        const acc = new Map<string, { ts: number; label: string; time: number; dist: number; hrTime: number }>();
+
+        fullData.forEach(s => {
+            const pts = s.trackPoints;
+            if (!pts || pts.length < 2) return;
+            const smoothed = smoothAltitudes(pts.map(p => p.altitude));
+            const start = new Date(s.startTime);
+            const key = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}`;
+            if (!acc.has(key)) {
+                acc.set(key, {
+                    ts: new Date(start.getFullYear(), start.getMonth(), 1).getTime(),
+                    label: `${getMonthName(start).slice(0, 3).toUpperCase()} ${String(start.getFullYear()).slice(2)}`,
+                    time: 0, dist: 0, hrTime: 0
+                });
+            }
+            const bucket = acc.get(key)!;
+            for (let i = 1; i < pts.length; i++) {
+                const hr = pts[i].hr;
+                if (!(hr >= 145 && hr <= 155)) continue;
+                const dt = (new Date(pts[i].timestamp).getTime() - new Date(pts[i - 1].timestamp).getTime()) / 1000;
+                if (!(dt > 0) || dt > 60) continue; // descarta puntos parados y huecos de GPS
+                const dd = pts[i].dist - pts[i - 1].dist;
+                if (!(dd > 0)) continue;
+                const a0 = smoothed[i - 1], a1 = smoothed[i];
+                if (!Number.isFinite(a0) || !Number.isFinite(a1)) continue;
+                const grade = (a1 - a0) / dd;
+                if (grade < -0.02 || grade > 0.02) continue;
+                bucket.time += dt;
+                bucket.dist += dd;
+                bucket.hrTime += hr * dt;
+            }
+        });
+
+        // Solo se pintan los meses con al menos 20 minutos de muestra válida.
+        return [...acc.values()]
+            .filter(m => m.time >= 20 * 60 && m.dist > 0)
+            .sort((a, b) => a.ts - b.ts)
+            .map(m => ({
+                ts: m.ts,
+                label: m.label,
+                paceSecKm: (m.time / m.dist) * 1000,
+                minutes: m.time / 60,
+                hr: m.hrTime / m.time,
+            }));
+    }, [fullData]);
+
+    const colW = 76;
+    const chartW = Math.max(360, months.length * colW);
+    const height = 220;
+    const topPad = 30;
+    const bottomPad = 70;
+
+    let content: React.ReactNode;
+    if (loading) {
+        content = (
+            <div className="h-40 flex items-center justify-center">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#34C759]"></div>
+            </div>
+        );
+    } else if (months.length === 0) {
+        content = <p className="text-gray-500 text-xs py-8 text-center">Aún no hay meses con al menos 20 minutos de tramos llanos entre 145 y 155 lpm.</p>;
+    } else {
+        const paces = months.map(m => m.paceSecKm);
+        const minPace = Math.min(...paces);
+        const maxPace = Math.max(...paces);
+        const range = Math.max(10, maxPace - minPace);
+        const xOf = (i: number) => months.length === 1 ? chartW / 2 : topPad + (i / (months.length - 1)) * (chartW - topPad * 2);
+        // Eje invertido: menos segundos/km (más rápido) van más arriba.
+        const yOf = (pace: number) => topPad + ((pace - minPace) / range) * (height - topPad - bottomPad);
+
+        content = (
+            <div className="overflow-x-auto">
+                <div className="relative" style={{ width: `${chartW}px`, height: `${height}px` }}>
+                    <svg viewBox={`0 0 ${chartW} ${height}`} width={chartW} height={height} className="absolute inset-0">
+                        <line x1={0} y1={topPad} x2={chartW} y2={topPad} stroke="rgba(255,255,255,0.05)" strokeDasharray="4,4" />
+                        <line x1={0} y1={height - bottomPad} x2={chartW} y2={height - bottomPad} stroke="rgba(255,255,255,0.05)" strokeDasharray="4,4" />
+                        <polyline points={months.map((m, i) => `${xOf(i)},${yOf(m.paceSecKm)}`).join(' ')} fill="none" stroke="#34C759" strokeWidth="2" />
+                    </svg>
+                    {months.map((m, i) => (
+                        <div
+                            key={m.ts}
+                            className="absolute -translate-x-1/2 -translate-y-1/2"
+                            style={{ left: `${xOf(i)}px`, top: `${yOf(m.paceSecKm)}px` }}
+                            title={`${m.label}: ${formatPace(m.paceSecKm / 60)} · FC media ${Math.round(m.hr)} lpm · ${Math.round(m.minutes)} min`}
+                        >
+                            <div className="w-2.5 h-2.5 rounded-full bg-[#34C759] border border-black shadow-[0_0_8px_rgba(52,199,89,0.8)]"></div>
+                            <div className="absolute left-1/2 top-3 -translate-x-1/2 text-center whitespace-nowrap">
+                                <p className="text-[10px] font-mono font-bold text-white">{formatPace(m.paceSecKm / 60)}</p>
+                                <p className="text-[8px] text-gray-500">{Math.round(m.minutes)} min</p>
+                                <p className="text-[8px] text-gray-500 uppercase">{m.label}</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="glass-panel p-5 rounded-3xl col-span-4 relative">
+            <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-4 gap-1">
+                <h4 className="text-sm font-semibold text-gray-400 flex items-center"><Icons.Run /> <span className="ml-2">Ritmo a pulso fijo</span></h4>
+                <p className="text-[10px] text-gray-500">ritmo a 150 lpm en llano · tramos con pendiente entre −2 % y +2 %</p>
+            </div>
+            {content}
         </div>
     );
 };
