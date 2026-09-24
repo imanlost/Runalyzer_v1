@@ -4,7 +4,7 @@ import L from 'leaflet';
 import { Session, UserProfile, TrackPoint, DailyFitness } from './types';
 import { Icons, getSportConfig } from './icons';
 import { InfoTooltip, MetricCard } from './components';
-import { calculateGlobalVo2Max, formatPace, formatTime, formatMetric, calculateIndividualizedK, calculateACWR, getWeekStartMonday, smoothAltitudes, getMonthName, calculateEfficiencyFactor } from './utils';
+import { calculateGlobalVo2Max, formatPace, formatTime, formatMetric, calculateIndividualizedK, calculateACWR, getWeekStartMonday, smoothAltitudes, getMonthName, calculateEfficiencyFactor, estimateVentilatoryThresholds, estimatePower } from './utils';
 import { getAllSessionsFromDB, getFullSessionFromDB } from './db'; 
 
 // --- COMPONENTES AUXILIARES PARA ANALYTICS ---
@@ -64,17 +64,9 @@ export const InjuryPreventionCard = ({ sessions }: { sessions: Session[] }) => {
 };
 
 export const AdvancedAnalytics = ({ sessions, profile, onShowInfo }: { sessions: Session[], profile: UserProfile, onShowInfo: (t: string) => void }) => {
-    let vt1_hr, vt2_hr;
-
-    if (profile.customZones) {
-        // En perfil manual, VT1 suele ser el tope de Z2, VT2 el tope de Z4
-        vt1_hr = profile.customZones.z2;
-        vt2_hr = profile.customZones.z4;
-    } else {
-        const fcr = profile.maxHr - profile.restHr;
-        vt1_hr = Math.round(profile.restHr + (0.60 * fcr));
-        vt2_hr = Math.round(profile.restHr + (0.85 * fcr));
-    }
+    // Umbrales ventilatorios estimados por el motor: zonas propias (topes de Z2 y
+    // Z4) si existen, o Karvonen (60 % y 85 % de la reserva cardíaca) si no.
+    const vt = estimateVentilatoryThresholds(profile);
     
     const runSessions = sessions.filter(s => (s.sport === 'RUNNING' || s.sport === 'TRAIL_RUNNING') && s.distance > 0 && s.avgHr > 0);
     const last4Weeks = sessions.filter(s => (new Date().getTime() - new Date(s.startTime).getTime()) < 2419200000);
@@ -90,8 +82,13 @@ export const AdvancedAnalytics = ({ sessions, profile, onShowInfo }: { sessions:
             : null
     );
 
-    const avgSpeedLastMonth = last4Weeks.filter(s=>s.sport==='RUNNING').reduce((acc, s) => acc + (s.distance/s.duration), 0) / (last4Weeks.filter(s=>s.sport==='RUNNING').length || 1);
-    const estimatedPower = avgSpeedLastMonth > 0 ? formatMetric(profile.weight * avgSpeedLastMonth * 1.04) : '--';
+    const runsLastMonth = last4Weeks.filter(s=>s.sport==='RUNNING');
+    const avgSpeedLastMonth = runsLastMonth.reduce((acc, s) => acc + (s.distance/s.duration), 0) / (runsLastMonth.length || 1);
+    // Pendiente media de esas sesiones: la potencia estimada la usa para no
+    // quedarse corta en cuesta (sin pendiente el modelo es el de siempre).
+    const totalDistLastMonth = runsLastMonth.reduce((acc, s) => acc + s.distance, 0);
+    const avgGradeLastMonth = totalDistLastMonth > 0 ? runsLastMonth.reduce((acc, s) => acc + s.totalElevationGain, 0) / totalDistLastMonth : 0;
+    const estimatedPower = avgSpeedLastMonth > 0 ? formatMetric(estimatePower(profile.weight, avgSpeedLastMonth, avgGradeLastMonth)) : '--';
     const paceVam = maxVam > 0 ? formatPace(60 / maxVam) : '--';
     
     const hasStride = recentRuns.some(s => s.avgStrideLength && s.avgStrideLength > 0);
@@ -107,13 +104,25 @@ export const AdvancedAnalytics = ({ sessions, profile, onShowInfo }: { sessions:
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4 relative z-10">
                 <div className="space-y-3 bg-white/5 p-3 rounded-2xl border border-white/5">
                     <h5 className="text-xs font-bold text-[#007AFF] uppercase tracking-wide mb-2 border-b border-[#007AFF]/30 pb-1 flex items-center justify-between">Umbrales <InfoTooltip type="zones" /></h5>
-                    <div className="flex justify-between items-center"><span className="text-xs text-gray-400">{profile.customZones ? 'Z2 Max' : 'VT1 (Aeróbico)'}</span><span className="text-lg font-mono font-bold">{formatMetric(vt1_hr)} <span className="text-[10px] text-gray-500">bpm</span></span></div>
-                    <div className="flex justify-between items-center"><span className="text-xs text-gray-400">{profile.customZones ? 'Z4 Max' : 'VT2 (Anaeróbico)'}</span><span className="text-lg font-mono font-bold">{formatMetric(vt2_hr)} <span className="text-[10px] text-gray-500">bpm</span></span></div>
+                    <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-400">{profile.customZones ? 'Z2 Max' : 'VT1 (Aeróbico)'}</span>
+                        <span className="text-right">
+                            <span className="text-lg font-mono font-bold">{formatMetric(vt.vt1Hr)} <span className="text-[10px] text-gray-500">bpm</span></span>
+                            <span className="block text-[9px] text-gray-500">estimación · {vt.source === 'customZones' ? 'zonas propias' : 'Karvonen'}</span>
+                        </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                        <span className="text-xs text-gray-400">{profile.customZones ? 'Z4 Max' : 'VT2 (Anaeróbico)'}</span>
+                        <span className="text-right">
+                            <span className="text-lg font-mono font-bold">{formatMetric(vt.vt2Hr)} <span className="text-[10px] text-gray-500">bpm</span></span>
+                            <span className="block text-[9px] text-gray-500">estimación · {vt.source === 'customZones' ? 'zonas propias' : 'Karvonen'}</span>
+                        </span>
+                    </div>
                 </div>
                 <div className="space-y-3 bg-white/5 p-3 rounded-2xl border border-white/5">
                     <h5 className="text-xs font-bold text-[#34C759] uppercase tracking-wide mb-2 border-b border-[#34C759]/30 pb-1 flex items-center justify-between">Potencia & Ritmo <InfoTooltip type="vam" /></h5>
                     <div className="flex justify-between items-center"><span className="text-xs text-gray-400">VAM (6 min)</span><div className="text-right"><p className="text-lg font-mono font-bold text-[#34C759]">{paceVam} <span className="text-[10px] text-gray-500">/km</span></p></div></div>
-                    <div className="flex justify-between items-center"><span className="text-xs text-gray-400">Potencia Est.</span><div className="text-right"><p className="text-lg font-mono font-bold text-yellow-500">{estimatedPower} <span className="text-[10px] text-gray-500">w</span></p></div> <InfoTooltip type="power" /></div>
+                    <div className="flex justify-between items-center"><span className="text-xs text-gray-400">Potencia Est.</span><div className="text-right"><p className="text-lg font-mono font-bold text-yellow-500">{estimatedPower} <span className="text-[10px] text-gray-500">w</span></p><p className="text-[9px] text-gray-500">estimación</p></div> <InfoTooltip type="power" /></div>
                 </div>
                 <div className="space-y-3 bg-white/5 p-3 rounded-2xl border border-white/5">
                     <h5 className="text-xs font-bold text-purple-500 uppercase tracking-wide mb-2 border-b border-purple-500/30 pb-1 flex items-center justify-between">Carga & Eficiencia <InfoTooltip type="trimp" /></h5>
@@ -181,7 +190,8 @@ export const TrendAnalysis = memo(({ sessions, profile }: { sessions: Session[],
             let vo2Vam = 0;
             if (s.vam6min) vo2Vam = 3.5 + 0.2 * (s.vam6min * 60);
             
-            const power = s.distance > 0 ? (profile.weight * (s.distance/s.duration) * 1.04) : 0;
+            const grade = s.distance > 0 ? s.totalElevationGain / s.distance : 0;
+            const power = s.distance > 0 ? estimatePower(profile.weight, s.distance/s.duration, grade) : 0;
 
             return {
                 date: new Date(s.startTime).toLocaleDateString(),

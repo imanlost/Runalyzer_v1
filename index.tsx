@@ -2,11 +2,11 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Session, SessionSummary, UserProfile, Notification } from './types';
 import { Icons, getSportConfig } from './icons';
-import { isSameDay, getMonthName, calculateTRIMP, calculateACSMVo2, calculateClimbScore, generateMockHistory, formatTime, formatPace, formatMetric, calculateAverageStrideLength, getWindDirectionLabel, fetchWeatherForSession } from './utils';
+import { isSameDay, getMonthName, calculateTRIMP, calculateACSMVo2, calculateClimbScore, generateMockHistory, formatTime, formatPace, formatMetric, calculateAverageStrideLength, getWindDirectionLabel, fetchWeatherForSession, calculateDecoupling } from './utils';
 import { getAllSessionSummaries, getFullSessionFromDB, saveSessionToDB, deleteSessionFromDB, clearDB } from './db';
 import { parseCsv, parseFitData, parsePolarJson } from './parsers';
 import { importFromIntervals } from './intervals';
-import { CalendarWidget, NotificationToast, ProfileModal, SummaryItem, MetricCard, RpeInputWidget } from './components';
+import { CalendarWidget, NotificationToast, ProfileModal, SummaryItem, MetricCard, RpeInputWidget, InfoTooltip } from './components';
 import { 
     AdvancedAnalytics, 
     RecoveryAdvisor, 
@@ -26,7 +26,7 @@ import {
     InjuryPreventionCard
 } from './analytics';
 
-const Sidebar = ({ sessions, view, setView, selectedSessionId, handleSelectSession, setPlaybackIndex, searchQuery, setSearchQuery, selectedDate, setSelectedDate, expandedGroups, toggleGroup, exportDatabase, clearAllSessions, handleDataLoaded, deleteSession, addNotification, openProfile, isSelectionMode, toggleSelectionMode, selectedIds, toggleSelection, deleteSelected, syncIntervals, syncCount, setSyncCount }: any) => {
+const Sidebar = ({ sessions, view, setView, selectedSessionId, handleSelectSession, setPlaybackIndex, searchQuery, setSearchQuery, selectedDate, setSelectedDate, expandedGroups, toggleGroup, exportDatabase, clearAllSessions, handleDataLoaded, deleteSession, addNotification, openProfile, isSelectionMode, toggleSelectionMode, selectedIds, toggleSelection, deleteSelected, syncIntervals, syncCount, setSyncCount, restHr }: any) => {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -39,16 +39,16 @@ const Sidebar = ({ sessions, view, setView, selectedSessionId, handleSelectSessi
             try {
                 if (file.name.endsWith('.fit')) {
                     const buffer = await file.arrayBuffer();
-                    const session = await parseFitData(buffer, file.name);
+                    const session = await parseFitData(buffer, file.name, restHr);
                     loaded.push(session);
                 } else if (file.name.endsWith('.json')) {
                     const text = await file.text();
                     const json = JSON.parse(text);
                     if (Array.isArray(json)) loaded = loaded.concat(json); 
-                    else loaded.push(parsePolarJson(json, file.name));
+                    else loaded.push(parsePolarJson(json, file.name, restHr));
                 } else if (file.name.endsWith('.csv')) {
                     const text = await file.text();
-                    loaded.push(parseCsv(text, file.name));
+                    loaded.push(parseCsv(text, file.name, restHr));
                 }
             } catch (err: any) {
                 console.error(err);
@@ -231,6 +231,25 @@ const App = () => {
     const [isSelectionMode, setIsSelectionMode] = useState(false);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [syncCount, setSyncCount] = useState(10);
+
+    // Decoupling cardíaco de la sesión seleccionada. Se memoiza para no rehacerlo
+    // en cada tick del reproductor. `reliable` exige deriva positiva y terreno
+    // poco montañoso: por encima de ~10 m/km el desnivel manda y el valor deja de
+    // aislar la deriva cardíaca.
+    const decoupling = useMemo(() => {
+        const pts = selectedSession?.trackPoints;
+        if (!selectedSession || !pts || pts.length < 2) return null;
+        const altitudes = pts.map(p => p.altitude);
+        const distances = pts.map(p => p.dist);
+        const times = pts.map(p => new Date(p.timestamp).getTime() / 1000);
+        const hrs = pts.map(p => p.hr);
+        if (!hrs.some(h => h > 0)) return null;
+        const value = calculateDecoupling(altitudes, distances, times, hrs);
+        // 0 significa "sin tramos suficientes" (o deriva nula): no se muestra el bloque.
+        if (!Number.isFinite(value) || value === 0) return null;
+        const elevPerKm = selectedSession.distance > 0 ? selectedSession.totalElevationGain / (selectedSession.distance / 1000) : 0;
+        return { value, reliable: value > 0 && elevPerKm <= 10 };
+    }, [selectedSession]);
 
     const toggleSelectionMode = () => {
         setIsSelectionMode(!isSelectionMode);
@@ -425,7 +444,8 @@ const App = () => {
                 userProfile.intervalsAthleteId, 
                 userProfile.intervalsApiKey,
                 (msg) => addNotification({ type: 'info', message: msg }),
-                syncCount
+                syncCount,
+                userProfile.restHr
             );
             
             if (addedSessions.length > 0) {
@@ -563,6 +583,21 @@ const App = () => {
                         <SummaryItem label="Climb Score" value={formatMetric(currentSession.climbScore)} unit="" color="text-yellow-400" />
                      </div>
                 </div>
+                {decoupling && (
+                <div className="glass-panel p-4 rounded-3xl mt-4 border border-white/10">
+                    <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-gray-400 uppercase flex items-center">Desacople cardíaco <InfoTooltip type="efficiency" /></span>
+                        <span className={`text-lg font-mono font-bold ${decoupling.reliable ? 'text-blue-300' : 'text-gray-500'}`}>{decoupling.value.toFixed(1)}%</span>
+                    </div>
+                    {decoupling.reliable ? (
+                        <p className="text-[10px] text-gray-500 mt-2">Deriva de la eficiencia entre la primera y la segunda mitad. Solo es interpretable en sesiones de terreno y esfuerzo homogéneos.</p>
+                    ) : decoupling.value < 0 ? (
+                        <p className="text-[10px] text-amber-400/90 mt-2">Valor negativo: la segunda mitad sale más eficiente. En terreno con desnivel esto no significa mejora, sino que el terreno manda; no lo interpretes como progreso.</p>
+                    ) : (
+                        <p className="text-[10px] text-amber-400/90 mt-2">Sesión con desnivel alto: aquí el desacople no aísla la deriva cardíaca. Solo es interpretable en terreno y esfuerzo homogéneos.</p>
+                    )}
+                </div>
+                )}
                 {currentSession.weather && (
                 <div className="glass-panel p-4 rounded-3xl mt-4 border border-white/10">
                     <h4 className="text-xs font-semibold text-gray-400 mb-3 flex items-center">
@@ -645,6 +680,7 @@ const App = () => {
                 syncIntervals={syncIntervals}
                 syncCount={syncCount}
                 setSyncCount={setSyncCount}
+                restHr={userProfile.restHr}
             />
             <main className="flex-1 h-full overflow-y-auto relative scrollbar-hide">
                 <div className="max-w-7xl mx-auto p-8 pt-12">
