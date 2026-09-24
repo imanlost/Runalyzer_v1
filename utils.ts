@@ -379,6 +379,84 @@ export const calculateDecoupling = (
     return ((ef1 - ef2) / ef1) * 100;
 };
 
+/**
+ * Estructura mínima de una sesión para detectar el umbral. Es una interfaz
+ * propia y ligera (no el `Session` completo) para poder probar la función sola:
+ * basta con el deporte, la fecha y los arrays de tiempo y distancia.
+ */
+export interface ThresholdSession {
+    sport: string;              // 'RUNNING' o 'TRAIL_RUNNING' para que cuente
+    date: string | number;      // fecha de inicio (ISO o epoch en ms)
+    times: number[];            // instantes en segundos (relativos o absolutos)
+    distances: number[];        // distancia acumulada en metros
+}
+
+/**
+ * Umbral funcional estimado a partir de las sesiones de carrera de los últimos
+ * 90 días. Busca en cada sesión el mejor esfuerzo sostenido de 20 minutos con
+ * una ventana deslizante sobre tiempo y la distancia acumulada, con 5 s de
+ * tolerancia de muestreo, y devuelve la media de los 3 mejores valores (m/s).
+ *
+ * @param now instante de referencia en milisegundos (por defecto, ahora);
+ *            se expone para poder testear la ventana de 90 días sin depender
+ *            del reloj real.
+ */
+export const detectThresholdPace = (sessions: ThresholdSession[], now: number = Date.now()): number => {
+    const NINETY_DAYS_MS = 90 * 24 * 60 * 60 * 1000;
+    const WINDOW_SEC = 1200;
+    const TOLERANCE_SEC = 5;
+
+    const bestSpeeds: number[] = [];
+
+    for (const session of sessions) {
+        const isRunning = session.sport === 'RUNNING' || session.sport === 'TRAIL_RUNNING';
+        if (!isRunning) continue;
+        const sessionTime = new Date(session.date).getTime();
+        if (!Number.isFinite(sessionTime) || now - sessionTime > NINETY_DAYS_MS) continue;
+
+        const times = session.times;
+        const dists = session.distances;
+        const count = Math.min(times.length, dists.length);
+        if (count < 2) continue;
+
+        let maxSpeed = 0;
+        let left = 0;
+        for (let right = 1; right < count; right++) {
+            while (times[right] - times[left] > WINDOW_SEC) left++;
+            const duration = times[right] - times[left];
+            if (duration >= WINDOW_SEC - TOLERANCE_SEC) {
+                const distance = dists[right] - dists[left];
+                const speedMps = distance / duration;
+                if (speedMps > maxSpeed) maxSpeed = speedMps;
+            }
+        }
+        if (maxSpeed > 0) bestSpeeds.push(maxSpeed);
+    }
+
+    if (bestSpeeds.length === 0) return 0;
+    bestSpeeds.sort((a, b) => b - a);
+    const top = bestSpeeds.slice(0, 3);
+    return top.reduce((a, b) => a + b, 0) / top.length;
+};
+
+/**
+ * Fronteras de las 6 zonas de ritmo derivadas de la velocidad de umbral, con
+ * los mismos porcentajes que usa intervals.icu (77,5 % · 87,7 % · 94,3 % ·
+ * 100 % · 103,4 % · 111,5 %). Devuelve los segundos por kilómetro de cada
+ * frontera, de la más lenta a la más rápida.
+ */
+export const paceZonesFromThreshold = (thresholdSpeedMps: number): number[] => {
+    const PERCENTAGES = [0.775, 0.877, 0.943, 1.0, 1.034, 1.115];
+    if (!(thresholdSpeedMps > 0)) return [0, 0, 0, 0, 0, 0];
+    return PERCENTAGES.map(pct => 1000 / (thresholdSpeedMps * pct));
+};
+
+export interface VentilatoryThresholds {
+    vt1Hr: number;
+    vt2Hr: number;
+    source: 'customZones' | 'karvonen';
+}
+
 export const calculateACSMVo2 = (trackPoints: TrackPoint[], maxHr: number, restHr: number = 60): number => {
     if (!trackPoints || trackPoints.length < 300) return 0;
 

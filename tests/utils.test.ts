@@ -17,7 +17,10 @@ import {
     calculateGradeAdjustedPace,
     calculateEfficiencyFactor,
     calculateDecoupling,
+    detectThresholdPace,
+    paceZonesFromThreshold,
 } from '../utils.ts';
+import type { ThresholdSession } from '../utils.ts';
 
 // --- Utilidades de los tests ---
 
@@ -211,4 +214,64 @@ test('calculateEfficiencyFactor descarta los puntos con velocidad o FC cero', ()
     const dist = efTimes.map(t => (t < 100 ? 0 : (t - 100) * 3.0));
     const ef = calculateEfficiencyFactor(dist, efTimes, new Array(200).fill(0));
     assert.equal(ef, 0);
+});
+
+// --- TAREA 3: umbral y zonas propias ---
+//
+// Tres sesiones de 25 min (1500 muestras a 1 s) a 3,738 m/s constante.
+const thresholdTimes = Array.from({ length: 1501 }, (_, i) => i);
+const thresholdDistances = thresholdTimes.map(t => t * 3.738);
+const thresholdSession = (daysAgo: number, now: number): ThresholdSession => ({
+    sport: 'RUNNING',
+    date: now - daysAgo * 24 * 60 * 60 * 1000,
+    times: thresholdTimes,
+    distances: thresholdDistances,
+});
+
+test('detectThresholdPace promedia los 3 mejores esfuerzos de 20 min en m/s', () => {
+    const now = new Date('2024-06-01T12:00:00Z').getTime();
+    const threshold = detectThresholdPace(
+        [thresholdSession(1, now), thresholdSession(10, now), thresholdSession(20, now)],
+        now
+    );
+    assertClose(threshold, 3.738, 1e-6, 'umbral de 20 min');
+});
+
+test('detectThresholdPace ignora las sesiones fuera de los últimos 90 días', () => {
+    const now = new Date('2024-06-01T12:00:00Z').getTime();
+    const threshold = detectThresholdPace([thresholdSession(120, now)], now);
+    assert.equal(threshold, 0);
+});
+
+test('detectThresholdPace no deja que un parón entre en la mejor ventana de 20 min', () => {
+    // 20 min corriendo + 60 s parado + 20 min corriendo. La mejor ventana es
+    // una de las dos partes limpias (3,738 m/s); si el parón se colara, la
+    // media bajaría a ~3,55 m/s.
+    const times: number[] = [];
+    const distances: number[] = [];
+    let dist = 0;
+    for (let t = 0; t <= 2460; t++) {
+        times.push(t);
+        distances.push(dist);
+        if (t < 1200 || t >= 1260) dist += 3.738;
+    }
+    const now = new Date('2024-06-01T12:00:00Z').getTime();
+    const session: ThresholdSession = {
+        sport: 'RUNNING',
+        date: now - 2 * 24 * 60 * 60 * 1000,
+        times,
+        distances,
+    };
+    const threshold = detectThresholdPace([session], now);
+    assertClose(threshold, 3.738, 1e-6, 'umbral con parón');
+    assert.ok(threshold > 3.6, `el parón no debe entrar en la ventana; obtuve ${threshold}`);
+});
+
+test('paceZonesFromThreshold usa los porcentajes de intervals.icu', () => {
+    const zones = paceZonesFromThreshold(3.738);
+    // Fronteras en s/km: 345,19 · 305,04 · 283,69 · 267,52 · 258,73 · 239,93
+    assert.deepEqual(zones.map(paceLabel), ['5:45', '5:05', '4:43', '4:27', '4:18', '3:59']);
+    assertClose(zones[0], 1000 / (3.738 * 0.775), 1e-9, 'Z1');
+    assertClose(zones[3], 1000 / 3.738, 1e-9, 'umbral');
+    assertClose(zones[5], 1000 / (3.738 * 1.115), 1e-9, 'Z6');
 });
