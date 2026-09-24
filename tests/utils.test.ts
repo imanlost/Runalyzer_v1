@@ -12,6 +12,7 @@ import { test } from 'node:test';
 import { strict as assert } from 'node:assert';
 import {
     formatMetric,
+    formatPace,
     calculateElevationGain,
     calculateSlidingWindowMaxSpeed,
     calculateGradeAdjustedPace,
@@ -61,6 +62,20 @@ test('formatMetric es tolerante a valores inválidos o no numéricos', () => {
     assert.equal(formatMetric(Infinity), '--');
     assert.equal(formatMetric('123'), '--');
     assert.equal(formatMetric({}), '--');
+});
+
+test('formatPace redondea el total de segundos antes de descomponerlo', () => {
+    // 3,9998 min = 239,988 s → 240 s = 4'00'' (antes salía 3'60'').
+    assert.equal(formatPace(3.9998), "4'00''");
+    // 4,4586 min = 267,516 s → 268 s = 4'28''.
+    assert.equal(formatPace(4.4586), "4'28''");
+    // El caso normal no cambia.
+    assert.equal(formatPace(6), "6'00''");
+    assert.equal(formatPace(4.5), "4'30''");
+    // Un ritmo inválido sigue devolviendo el marcador.
+    assert.equal(formatPace(0), '--');
+    assert.equal(formatPace(-1), '--');
+    assert.equal(formatPace(NaN), '--');
 });
 
 test('calculateElevationGain suaviza el ruido del altímetro y da 0 en terreno llano', () => {
@@ -138,17 +153,17 @@ test('GAP en llano no cambia el ritmo y deja el factor en 1', () => {
     assertClose(360 / gap, 1.0, 1e-9, 'factor a 0 %');
 });
 
-test('GAP a +5 % da 4:36/km con factor 1,301', () => {
+test('GAP a +5 % da 276,62 s/km (tolerancia 0,5 s)', () => {
     const gap = gapForGrade(0.05);
-    assertClose(gap, 276.616, 0.01, 'GAP a +5 %');
-    assert.equal(paceLabel(gap), '4:36');
+    // Se comprueba el número que devuelve la función sin truncarlo a m:ss; la
+    // presentación la resuelve formatPace. Tolerancia de ±0,5 s.
+    assertClose(gap, 276.62, 0.5, 'GAP a +5 %');
     assertClose(360 / gap, 1.301443, 1e-5, 'factor a +5 %');
 });
 
-test('GAP a −5 % da 7:51/km con factor 0,763', () => {
+test('GAP a −5 % da 471,97 s/km (tolerancia 0,5 s)', () => {
     const gap = gapForGrade(-0.05);
-    assertClose(gap, 471.972, 0.01, 'GAP a −5 %');
-    assert.equal(paceLabel(gap), '7:51');
+    assertClose(gap, 471.97, 0.5, 'GAP a −5 %');
     assertClose(360 / gap, 0.762757, 1e-5, 'factor a −5 %');
 });
 

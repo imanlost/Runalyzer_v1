@@ -3,8 +3,12 @@ import { TrackPoint, Session, SessionSummary, AcwrResult, WeatherData, UserProfi
 
 export const formatPace = (minPerKm: number) => {
     if (!isFinite(minPerKm) || isNaN(minPerKm) || minPerKm <= 0) return '--';
-    const m = Math.floor(minPerKm);
-    const s = Math.round((minPerKm - m) * 60);
+    // Se redondea el total de segundos ANTES de descomponerlo: redondear solo la
+    // parte decimal permitía que un ritmo de 3,9998 min (3 min 59,99 s) se pintara
+    // como 3'60'' en lugar de 4'00''.
+    const totalSeconds = Math.round(minPerKm * 60);
+    const m = Math.floor(totalSeconds / 60);
+    const s = totalSeconds % 60;
     return `${m}'${s < 10 ? '0' + s : s}''`;
 };
 
