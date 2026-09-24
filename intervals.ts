@@ -47,7 +47,14 @@ export const fetchIntervalsActivityStreams = async (activityId: string, apiKey: 
     return await res.json();
 };
 
-export const importFromIntervals = async (athleteId: string, apiKey: string, onProgress: (msg: string) => void, maxActivities: number = 10): Promise<Session[]> => {
+/**
+ * Importa las últimas actividades de intervals.icu.
+ *
+ * `restHr` es la FC de reposo con la que se calculan el VO2max por ACSM y el
+ * TRIMP. Debe ser la del perfil del usuario (`profile.restHr`); si no se pasa,
+ * se usa 60 como valor por defecto documentado, que es una aproximación.
+ */
+export const importFromIntervals = async (athleteId: string, apiKey: string, onProgress: (msg: string) => void, maxActivities: number = 10, restHr: number = 60): Promise<Session[]> => {
     onProgress("Obteniendo lista de actividades desde Intervals.icu...");
     const activities = await fetchIntervalsActivities(athleteId, apiKey, '2010-01-01');
     const sessions: Session[] = [];
@@ -139,8 +146,8 @@ export const importFromIntervals = async (athleteId: string, apiKey: string, onP
             };
 
             // Calculate extra metrics
-            session.acsmVo2Max = calculateACSMVo2(trackPoints, maxHr || 190, 60);
-            session.trimp = session.trimp || calculateTRIMP(trackPoints, maxHr || 190, 60);
+            session.acsmVo2Max = calculateACSMVo2(trackPoints, maxHr || 190, restHr);
+            session.trimp = session.trimp || calculateTRIMP(trackPoints, maxHr || 190, restHr);
             session.climbScore = calculateClimbScore(session.totalElevationGain, session.distance);
 
             // Fetch weather data for the session

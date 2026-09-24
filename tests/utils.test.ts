@@ -19,6 +19,8 @@ import {
     calculateDecoupling,
     detectThresholdPace,
     paceZonesFromThreshold,
+    estimateVentilatoryThresholds,
+    calculateACSMVo2,
 } from '../utils.ts';
 import type { ThresholdSession } from '../utils.ts';
 
@@ -274,4 +276,40 @@ test('paceZonesFromThreshold usa los porcentajes de intervals.icu', () => {
     assertClose(zones[0], 1000 / (3.738 * 0.775), 1e-9, 'Z1');
     assertClose(zones[3], 1000 / 3.738, 1e-9, 'umbral');
     assertClose(zones[5], 1000 / (3.738 * 1.115), 1e-9, 'Z6');
+});
+
+// --- TAREA 4: honestidad de VO2max y umbrales ventilatorios ---
+
+test('estimateVentilatoryThresholds etiqueta el origen y no cambia los números', () => {
+    // Sin zonas personalizadas: Karvonen (60 % y 85 % de la reserva cardíaca).
+    const karvonen = estimateVentilatoryThresholds({ restHr: 45, maxHr: 190, customZones: undefined });
+    assert.equal(karvonen.source, 'karvonen');
+    assert.equal(karvonen.vt1Hr, Math.round(45 + 0.60 * (190 - 45)));
+    assert.equal(karvonen.vt2Hr, Math.round(45 + 0.85 * (190 - 45)));
+    assert.equal(karvonen.vt1Hr, 132);
+    assert.equal(karvonen.vt2Hr, 168);
+
+    // Con zonas personalizadas: topes de Z2 y Z4.
+    const custom = estimateVentilatoryThresholds({
+        restHr: 45,
+        maxHr: 190,
+        customZones: { z1: 120, z2: 140, z3: 155, z4: 170 },
+    });
+    assert.equal(custom.source, 'customZones');
+    assert.equal(custom.vt1Hr, 140);
+    assert.equal(custom.vt2Hr, 170);
+});
+
+test('calculateACSMVo2 usa la FC de reposo recibida (no la fija a 60)', () => {
+    // 400 s a 3 m/s y FC 170 constante: con una FC de reposo menor la
+    // intensidad relativa sube y el VO2max estimado baja. Si la función
+    // ignorase `restHr`, ambos valores serían idénticos.
+    const points = Array.from({ length: 400 }, (_, t) => ({
+        lat: 0, lon: 0, timestamp: new Date(t * 1000).toISOString(), hr: 170,
+        speed: 3.0 * 3.6, altitude: 100, dist: t * 3.0, cadence: 0
+    }));
+    const with45 = calculateACSMVo2(points, 190, 45);
+    const with60 = calculateACSMVo2(points, 190, 60);
+    assert.ok(with45 > 0 && with60 > 0, `esperaba VO2max positivos, obtuve ${with45} y ${with60}`);
+    assert.ok(with45 < with60, `con restHr 45 debería salir menor que con 60: ${with45} vs ${with60}`);
 });

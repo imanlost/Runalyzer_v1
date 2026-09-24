@@ -1,5 +1,5 @@
 
-import { TrackPoint, Session, SessionSummary, AcwrResult, WeatherData } from './types';
+import { TrackPoint, Session, SessionSummary, AcwrResult, WeatherData, UserProfile } from './types';
 
 export const formatPace = (minPerKm: number) => {
     if (!isFinite(minPerKm) || isNaN(minPerKm) || minPerKm <= 0) return '--';
@@ -456,6 +456,27 @@ export interface VentilatoryThresholds {
     vt2Hr: number;
     source: 'customZones' | 'karvonen';
 }
+
+/**
+ * Umbrales ventilatorios ESTIMADOS. No son una medición de laboratorio:
+ * - Si el perfil tiene zonas personalizadas, se toman los topes de Z2 y Z4.
+ * - Si no, se aplica Karvonen (60 % y 85 % de la reserva cardíaca).
+ * El campo `source` permite a la interfaz etiquetarlos como estimación y
+ * saber de dónde salen. No modifica ningún número respecto al cálculo previo.
+ */
+export const estimateVentilatoryThresholds = (
+    profile: Pick<UserProfile, 'restHr' | 'maxHr' | 'customZones'>
+): VentilatoryThresholds => {
+    if (profile.customZones) {
+        return { vt1Hr: profile.customZones.z2, vt2Hr: profile.customZones.z4, source: 'customZones' };
+    }
+    const fcr = profile.maxHr - profile.restHr;
+    return {
+        vt1Hr: Math.round(profile.restHr + 0.60 * fcr),
+        vt2Hr: Math.round(profile.restHr + 0.85 * fcr),
+        source: 'karvonen'
+    };
+};
 
 export const calculateACSMVo2 = (trackPoints: TrackPoint[], maxHr: number, restHr: number = 60): number => {
     if (!trackPoints || trackPoints.length < 300) return 0;

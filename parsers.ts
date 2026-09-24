@@ -14,6 +14,9 @@ if (typeof window !== 'undefined') {
 }
 
 const DEFAULT_MAX_HR = 190;
+// FC de reposo de respaldo cuando no se conoce el perfil del usuario (los
+// parsers son puros y no lo reciben). Es solo un valor por defecto documentado:
+// quien importe desde la interfaz debería pasar `profile.restHr`.
 const DEFAULT_REST_HR = 60;
 
 // Helper para calcular zancada si no existe sensor
@@ -37,7 +40,7 @@ const pickDeviceElevationGain = (obj: any): number | null => {
     return null;
 };
 
-export const parseCsv = (text: string, filename: string): Session => {
+export const parseCsv = (text: string, filename: string, restHr: number = DEFAULT_REST_HR): Session => {
     const lines = text.split(/\r?\n/).filter(line => line.trim() !== '');
     if (lines.length < 2) throw new Error("CSV vacío o inválido");
     const header = lines[0].toLowerCase().split(/[,;]/).map(h => h.trim().replace(/"/g, ''));
@@ -133,7 +136,7 @@ export const parseCsv = (text: string, filename: string): Session => {
     
     const vam6min = calculateSlidingWindowMaxSpeed(trackPoints, 360);
     const best20minSpeed = calculateSlidingWindowMaxSpeed(trackPoints, 1200);
-    let acsmVo2Max = calculateACSMVo2(trackPoints, maxHr || DEFAULT_MAX_HR, DEFAULT_REST_HR);
+    let acsmVo2Max = calculateACSMVo2(trackPoints, maxHr || DEFAULT_MAX_HR, restHr);
     if (acsmVo2Max === 0 && vam6min > 0) acsmVo2Max = 3.5 * (vam6min * 3.6);
 
     return { 
@@ -152,13 +155,13 @@ export const parseCsv = (text: string, filename: string): Session => {
         best20minSpeed: best20minSpeed, 
         acsmVo2Max: acsmVo2Max, 
         trackPoints, 
-        trimp: calculateTRIMP(trackPoints, maxHr || DEFAULT_MAX_HR, DEFAULT_REST_HR), 
+        trimp: calculateTRIMP(trackPoints, maxHr || DEFAULT_MAX_HR, restHr), 
         climbScore: calculateClimbScore(totalElevationGain, cumDist),
         avgStrideLength: countStride > 0 ? sumStride / countStride : 0
     };
 };
 
-export const parsePolarJson = (json: any, filename: string): Session => {
+export const parsePolarJson = (json: any, filename: string, restHr: number = DEFAULT_REST_HR): Session => {
   try {
     const exercise = json.exercises?.[0] || json; 
     const startTime = exercise.startTime || new Date().toISOString();
@@ -208,7 +211,7 @@ export const parsePolarJson = (json: any, filename: string): Session => {
     
     const vam6min = calculateSlidingWindowMaxSpeed(trackPoints, 360);
     const best20minSpeed = calculateSlidingWindowMaxSpeed(trackPoints, 1200);
-    let acsmVo2Max = calculateACSMVo2(trackPoints, finalMaxHr || DEFAULT_MAX_HR, DEFAULT_REST_HR);
+    let acsmVo2Max = calculateACSMVo2(trackPoints, finalMaxHr || DEFAULT_MAX_HR, restHr);
     if (acsmVo2Max === 0 && vam6min > 0) acsmVo2Max = 3.5 * (vam6min * 3.6);
 
     return { 
@@ -227,7 +230,7 @@ export const parsePolarJson = (json: any, filename: string): Session => {
         best20minSpeed: best20minSpeed, 
         acsmVo2Max: acsmVo2Max, 
         trackPoints: trackPoints, 
-        trimp: calculateTRIMP(trackPoints, finalMaxHr || DEFAULT_MAX_HR, DEFAULT_REST_HR), 
+        trimp: calculateTRIMP(trackPoints, finalMaxHr || DEFAULT_MAX_HR, restHr), 
         climbScore: calculateClimbScore(totalAscent, distance),
         avgStrideLength: countStride > 0 ? sumStride / countStride : 0
     };
@@ -288,7 +291,7 @@ const getCoord = (val: any) => {
     return val;
 };
 
-export const parseFitData = (arrayBuffer: ArrayBuffer, filename: string): Promise<Session> => {
+export const parseFitData = (arrayBuffer: ArrayBuffer, filename: string, restHr: number = DEFAULT_REST_HR): Promise<Session> => {
     return new Promise((resolve, reject) => {
         try {
             const FitParserClass = (FitParserModule as any).default || FitParserModule;
@@ -426,7 +429,7 @@ export const parseFitData = (arrayBuffer: ArrayBuffer, filename: string): Promis
                         : calculateElevationGain(trackPoints.map(p => p.altitude));
                     let sport = 'OTHER'; if (sessionData?.sport) sport = sessionData.sport.toUpperCase();
                     
-                    let acsmVo2Max = calculateACSMVo2(trackPoints, maxHr || DEFAULT_MAX_HR, DEFAULT_REST_HR);
+                    let acsmVo2Max = calculateACSMVo2(trackPoints, maxHr || DEFAULT_MAX_HR, restHr);
                     const vam6min = calculateSlidingWindowMaxSpeed(trackPoints, 360); 
                     const best20minSpeed = calculateSlidingWindowMaxSpeed(trackPoints, 1200);
                     if (acsmVo2Max === 0 && vam6min > 0) acsmVo2Max = 3.5 * (vam6min * 3.6);
@@ -469,7 +472,7 @@ export const parseFitData = (arrayBuffer: ArrayBuffer, filename: string): Promis
                         best20minSpeed: best20minSpeed || 0, 
                         acsmVo2Max: acsmVo2Max || 0, 
                         trackPoints: trackPoints, 
-                        trimp: calculateTRIMP(trackPoints, finalMaxHr || DEFAULT_MAX_HR, DEFAULT_REST_HR), 
+                        trimp: calculateTRIMP(trackPoints, finalMaxHr || DEFAULT_MAX_HR, restHr), 
                         climbScore: calculateClimbScore(finalAscent, totalDistance),
                         avgStrideLength: avgStride,
                         avgGroundContactTime: avgStance,
