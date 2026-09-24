@@ -4,7 +4,7 @@ import L from 'leaflet';
 import { Session, UserProfile, TrackPoint, DailyFitness } from './types';
 import { Icons, getSportConfig } from './icons';
 import { InfoTooltip, MetricCard } from './components';
-import { calculateGlobalVo2Max, formatPace, formatTime, formatMetric, calculateIndividualizedK, calculateACWR, getWeekStartMonday, smoothAltitudes, getMonthName } from './utils';
+import { calculateGlobalVo2Max, formatPace, formatTime, formatMetric, calculateIndividualizedK, calculateACWR, getWeekStartMonday, smoothAltitudes, getMonthName, calculateEfficiencyFactor } from './utils';
 import { getAllSessionsFromDB, getFullSessionFromDB } from './db'; 
 
 // --- COMPONENTES AUXILIARES PARA ANALYTICS ---
@@ -1067,6 +1067,168 @@ export const PaceAtFixedHrChart = ({ sessions }: { sessions: Session[] }) => {
                 <p className="text-[10px] text-gray-500">ritmo a 150 lpm en llano · tramos con pendiente entre −2 % y +2 %</p>
             </div>
             {content}
+        </div>
+    );
+};
+
+/**
+ * Eficiencia aeróbica normalizada (m/min/bpm) calculada SOLO sobre tramos llanos
+ * (el motor descarta las pendientes fuera de −2 %/+2 %) y descartando las sesiones
+ * con menos de 30 minutos de tramos válidos. Se superpone una media móvil de 5
+ * sesiones para que la tendencia no la marque una salida suelta.
+ */
+export const NormalizedEfficiencyChart = ({ sessions }: { sessions: Session[] }) => {
+    const [fullData, setFullData] = useState<Session[]>([]);
+    const [loading, setLoading] = useState(false);
+    const [hover, setHover] = useState<{ x: number; y: number; index: number } | null>(null);
+
+    const runSessions = useMemo(
+        () => sessions
+            .filter(s => (s.sport === 'RUNNING' || s.sport === 'TRAIL_RUNNING') && s.distance > 0)
+            .sort((a, b) => new Date(a.startTime).getTime() - new Date(b.startTime).getTime()),
+        [sessions]
+    );
+
+    useEffect(() => {
+        if (runSessions.length === 0) { setFullData([]); return; }
+        const needsLoading = runSessions.some(s => !s.trackPoints || s.trackPoints.length === 0);
+        if (needsLoading) {
+            setLoading(true);
+            Promise.all(runSessions.map(s => getFullSessionFromDB(s.id))).then(results => {
+                setFullData(results.filter((s): s is Session => !!s));
+                setLoading(false);
+            }).catch(() => setLoading(false));
+        } else {
+            setFullData(runSessions as Session[]);
+        }
+    }, [runSessions]);
+
+    const points = useMemo(() => {
+        const list: { ts: number; date: string; ef: number }[] = [];
+        fullData.forEach(s => {
+            const pts = s.trackPoints;
+            if (!pts || pts.length < 2) return;
+            const distances = pts.map(p => p.dist);
+            const times = pts.map(p => new Date(p.timestamp).getTime() / 1000);
+            const heartrates = pts.map(p => p.hr);
+            const altitudes = pts.map(p => p.altitude);
+
+            const ef = calculateEfficiencyFactor(distances, times, heartrates, altitudes);
+            if (!(ef > 0)) return;
+
+            // Tiempo válido con el mismo criterio que usa el motor: tramos con
+            // distancia y duración positivas, FC > 0 y pendiente entre −2 %/+2 %.
+            let validSeconds = 0;
+            for (let i = 1; i < pts.length; i++) {
+                const dt = times[i] - times[i - 1];
+                const dd = distances[i] - distances[i - 1];
+                const hr = heartrates[i - 1];
+                if (!(dt > 0) || !(dd > 0) || !(hr > 0)) continue;
+                const grade = (altitudes[i] - altitudes[i - 1]) / dd;
+                if (grade < -0.02 || grade > 0.02) continue;
+                validSeconds += dt;
+            }
+            if (validSeconds < 30 * 60) return;
+
+            list.push({
+                ts: new Date(s.startTime).getTime(),
+                date: new Date(s.startTime).toLocaleDateString('es-ES'),
+                ef,
+            });
+        });
+        list.sort((a, b) => a.ts - b.ts);
+        return list;
+    }, [fullData]);
+
+    // Media móvil de 5 sesiones (incluida la actual).
+    const withMa = points.map((p, i) => {
+        const from = Math.max(0, i - 4);
+        const window = points.slice(from, i + 1);
+        return { ...p, ma: window.reduce((a, w) => a + w.ef, 0) / window.length };
+    });
+
+    const width = 1000;
+    const height = 260;
+    const padding = 30;
+
+    let content: React.ReactNode;
+    if (loading) {
+        content = (
+            <div className="h-40 flex items-center justify-center">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+            </div>
+        );
+    } else if (withMa.length === 0) {
+        content = <p className="text-gray-500 text-xs py-8 text-center">Aún no hay sesiones de carrera con 30 minutos o más de tramos llanos válidos.</p>;
+    } else {
+        const n = withMa.length;
+        const values = withMa.flatMap(p => [p.ef, p.ma]);
+        const minVal = Math.min(...values);
+        const maxVal = Math.max(...values);
+        const range = Math.max(0.01, maxVal - minVal);
+        const getX = (i: number) => n === 1 ? width / 2 : (i / (n - 1)) * width;
+        const getY = (v: number) => height - padding - ((v - minVal) / range) * (height - padding * 2);
+        const pathEf = withMa.map((p, i) => `${getX(i)},${getY(p.ef)}`).join(' L');
+        const pathMa = withMa.map((p, i) => `${getX(i)},${getY(p.ma)}`).join(' L');
+
+        content = (
+            <div className="relative w-full h-64">
+                <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible" preserveAspectRatio="none">
+                    <line x1={0} y1={padding} x2={width} y2={padding} stroke="rgba(255,255,255,0.05)" strokeDasharray="4,4" />
+                    <line x1={0} y1={height/2} x2={width} y2={height/2} stroke="rgba(255,255,255,0.05)" strokeDasharray="4,4" />
+                    <line x1={0} y1={height-padding} x2={width} y2={height-padding} stroke="rgba(255,255,255,0.05)" strokeDasharray="4,4" />
+                    <path d={`M${pathEf}`} fill="none" stroke="#3B82F6" strokeWidth="1.5" opacity="0.45" vectorEffect="non-scaling-stroke" />
+                    <path d={`M${pathMa}`} fill="none" stroke="#A855F7" strokeWidth="2.5" vectorEffect="non-scaling-stroke" />
+                    {hover && (
+                        <line x1={getX(hover.index)} y1={0} x2={getX(hover.index)} y2={height} stroke="white" strokeDasharray="2,2" opacity="0.4" vectorEffect="non-scaling-stroke" />
+                    )}
+                    {withMa.map((_, i) => (
+                        <rect
+                            key={i}
+                            x={getX(i) - (width/n)/2}
+                            y={0}
+                            width={width/n}
+                            height={height}
+                            fill="transparent"
+                            onMouseEnter={(e) => setHover({ x: e.clientX, y: e.clientY, index: i })}
+                            onMouseMove={(e) => setHover({ x: e.clientX, y: e.clientY, index: i })}
+                            onMouseLeave={() => setHover(null)}
+                        />
+                    ))}
+                </svg>
+                {withMa.map((p, i) => (
+                    <div
+                        key={p.ts}
+                        className="absolute w-1.5 h-1.5 rounded-full bg-[#3B82F6] -translate-x-1/2 -translate-y-1/2 pointer-events-none"
+                        style={{ left: `${(getX(i)/width)*100}%`, top: `${(getY(p.ef)/height)*100}%` }}
+                    />
+                ))}
+                {hover && createPortal(
+                    <div
+                        className="fixed z-[9999] bg-[#1C1C1E]/95 backdrop-blur border border-white/20 p-2.5 rounded-xl shadow-2xl pointer-events-none text-[10px] min-w-[150px]"
+                        style={{ left: hover.x, top: hover.y - 20, transform: 'translateX(-50%)' }}
+                    >
+                        <p className="font-bold text-gray-300 border-b border-white/10 pb-1 mb-1">{withMa[hover.index].date}</p>
+                        <p className="text-blue-400">Eficiencia: {withMa[hover.index].ef.toFixed(2)} <span className="text-gray-600">m/min/bpm</span></p>
+                        <p className="text-purple-400">Media 5: {withMa[hover.index].ma.toFixed(2)} <span className="text-gray-600">m/min/bpm</span></p>
+                    </div>,
+                    document.body
+                )}
+            </div>
+        );
+    }
+
+    return (
+        <div className="glass-panel p-5 rounded-3xl col-span-4 relative">
+            <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-4 gap-1">
+                <h4 className="text-sm font-semibold text-gray-400 flex items-center"><Icons.Trend /> <span className="ml-2">Eficiencia Normalizada</span></h4>
+                <p className="text-[10px] text-gray-500">solo tramos llanos · sesiones con ≥30 min válidos · media móvil de 5 sesiones</p>
+            </div>
+            {content}
+            <div className="flex justify-end space-x-4 text-[10px] mt-2">
+                <span className="text-blue-500 font-bold">● Eficiencia por sesión</span>
+                <span className="text-purple-400 font-bold">● Media móvil (5)</span>
+            </div>
         </div>
     );
 };
