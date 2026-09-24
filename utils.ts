@@ -16,6 +16,19 @@ export const formatTime = (seconds: number) => {
     return `${m}:${s < 10 ? '0'+s : s}`;
 };
 
+/**
+ * Formatea un valor numérico para mostrarlo en la interfaz.
+ * - Redondea a `decimals` decimales (0 por defecto, requisito del proyecto).
+ * - Devuelve '--' si el valor no es un número finito (null, undefined, NaN,
+ *   Infinity) o si llega ya como texto.
+ * Para distancias en kilómetros se usa `formatMetric(km, 2)`, que es la única
+ * excepción con 2 decimales.
+ */
+export const formatMetric = (value: unknown, decimals: number = 0): string => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return '--';
+    return value.toFixed(decimals);
+};
+
 export const generateSessionName = (sport: string, startTime: string, distanceMeters: number) => {
     const d = new Date(startTime);
     const validDate = !isNaN(d.getTime()) ? d : new Date();

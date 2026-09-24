@@ -4,7 +4,7 @@ import L from 'leaflet';
 import { Session, UserProfile, TrackPoint, DailyFitness } from './types';
 import { Icons, getSportConfig } from './icons';
 import { InfoTooltip, MetricCard } from './components';
-import { calculateGlobalVo2Max, formatPace, formatTime, calculateIndividualizedK, calculateACWR } from './utils';
+import { calculateGlobalVo2Max, formatPace, formatTime, formatMetric, calculateIndividualizedK, calculateACWR } from './utils';
 import { getAllSessionsFromDB, getFullSessionFromDB } from './db'; 
 
 // --- COMPONENTES AUXILIARES PARA ANALYTICS ---
@@ -37,8 +37,8 @@ export const InjuryPreventionCard = ({ sessions }: { sessions: Session[] }) => {
                     <span className="text-[10px] text-gray-500 ml-1 font-bold uppercase">{conf.label}</span>
                 </div>
                 <div className="text-right">
-                    <p className="text-[10px] text-gray-400">Aguda: <span className="text-white font-mono">{Math.round(acwr.acuteLoad)}</span></p>
-                    <p className="text-[10px] text-gray-400">Crónica: <span className="text-white font-mono">{Math.round(acwr.chronicLoad)}</span></p>
+                    <p className="text-[10px] text-gray-400">Aguda: <span className="text-white font-mono">{formatMetric(acwr.acuteLoad)}</span></p>
+                    <p className="text-[10px] text-gray-400">Crónica: <span className="text-white font-mono">{formatMetric(acwr.chronicLoad)}</span></p>
                 </div>
             </div>
 
@@ -84,12 +84,14 @@ export const AdvancedAnalytics = ({ sessions, profile, onShowInfo }: { sessions:
     const avgTrimp = last4Weeks.length > 0 ? Math.round(last4Weeks.reduce((a,b)=>a+(b.trimp||0),0) / last4Weeks.length) : 0;
     
     const recentRuns = runSessions.slice(0, 10);
-    const efficiency = recentRuns.length > 0 
-        ? (recentRuns.reduce((acc, s) => acc + ((s.distance/s.duration) / s.avgHr), 0) / recentRuns.length * 10000).toFixed(1)
-        : '--';
+    const efficiency = formatMetric(
+        recentRuns.length > 0
+            ? (recentRuns.reduce((acc, s) => acc + ((s.distance/s.duration) / s.avgHr), 0) / recentRuns.length * 10000)
+            : null
+    );
 
     const avgSpeedLastMonth = last4Weeks.filter(s=>s.sport==='RUNNING').reduce((acc, s) => acc + (s.distance/s.duration), 0) / (last4Weeks.filter(s=>s.sport==='RUNNING').length || 1);
-    const estimatedPower = avgSpeedLastMonth > 0 ? Math.round(profile.weight * avgSpeedLastMonth * 1.04) : '--';
+    const estimatedPower = avgSpeedLastMonth > 0 ? formatMetric(profile.weight * avgSpeedLastMonth * 1.04) : '--';
     const paceVam = maxVam > 0 ? formatPace(60 / maxVam) : '--';
     
     const hasStride = recentRuns.some(s => s.avgStrideLength && s.avgStrideLength > 0);
@@ -105,8 +107,8 @@ export const AdvancedAnalytics = ({ sessions, profile, onShowInfo }: { sessions:
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-5 gap-4 relative z-10">
                 <div className="space-y-3 bg-white/5 p-3 rounded-2xl border border-white/5">
                     <h5 className="text-xs font-bold text-[#007AFF] uppercase tracking-wide mb-2 border-b border-[#007AFF]/30 pb-1 flex items-center justify-between">Umbrales <InfoTooltip type="zones" /></h5>
-                    <div className="flex justify-between items-center"><span className="text-xs text-gray-400">{profile.customZones ? 'Z2 Max' : 'VT1 (Aeróbico)'}</span><span className="text-lg font-mono font-bold">{vt1_hr} <span className="text-[10px] text-gray-500">bpm</span></span></div>
-                    <div className="flex justify-between items-center"><span className="text-xs text-gray-400">{profile.customZones ? 'Z4 Max' : 'VT2 (Anaeróbico)'}</span><span className="text-lg font-mono font-bold">{vt2_hr} <span className="text-[10px] text-gray-500">bpm</span></span></div>
+                    <div className="flex justify-between items-center"><span className="text-xs text-gray-400">{profile.customZones ? 'Z2 Max' : 'VT1 (Aeróbico)'}</span><span className="text-lg font-mono font-bold">{formatMetric(vt1_hr)} <span className="text-[10px] text-gray-500">bpm</span></span></div>
+                    <div className="flex justify-between items-center"><span className="text-xs text-gray-400">{profile.customZones ? 'Z4 Max' : 'VT2 (Anaeróbico)'}</span><span className="text-lg font-mono font-bold">{formatMetric(vt2_hr)} <span className="text-[10px] text-gray-500">bpm</span></span></div>
                 </div>
                 <div className="space-y-3 bg-white/5 p-3 rounded-2xl border border-white/5">
                     <h5 className="text-xs font-bold text-[#34C759] uppercase tracking-wide mb-2 border-b border-[#34C759]/30 pb-1 flex items-center justify-between">Potencia & Ritmo <InfoTooltip type="vam" /></h5>
@@ -115,7 +117,7 @@ export const AdvancedAnalytics = ({ sessions, profile, onShowInfo }: { sessions:
                 </div>
                 <div className="space-y-3 bg-white/5 p-3 rounded-2xl border border-white/5">
                     <h5 className="text-xs font-bold text-purple-500 uppercase tracking-wide mb-2 border-b border-purple-500/30 pb-1 flex items-center justify-between">Carga & Eficiencia <InfoTooltip type="trimp" /></h5>
-                    <div className="flex justify-between items-center"><span className="text-xs text-gray-400">TRIMP (4 sem)</span><span className="text-lg font-mono font-bold text-white">{avgTrimp} <span className="text-[9px] text-gray-500 font-sans font-normal">pts</span></span></div>
+                    <div className="flex justify-between items-center"><span className="text-xs text-gray-400">TRIMP (4 sem)</span><span className="text-lg font-mono font-bold text-white">{formatMetric(avgTrimp)} <span className="text-[9px] text-gray-500 font-sans font-normal">pts</span></span></div>
                     <div className="flex justify-between items-center"><span className="text-xs text-gray-400">Eficiencia (Ratio)</span><span className="text-lg font-mono font-bold text-blue-300">{efficiency}</span> <InfoTooltip type="efficiency" /></div>
                 </div>
                 {hasStride && (
@@ -125,7 +127,7 @@ export const AdvancedAnalytics = ({ sessions, profile, onShowInfo }: { sessions:
                         {hasSensors ? (
                             <div className="flex justify-between items-center"><span className="text-xs text-gray-400">GCT</span><span className="text-lg font-mono font-bold text-orange-300">{Math.round(avgGCT)} <span className="text-[9px] text-gray-500 font-sans font-normal">ms</span></span> <InfoTooltip type="gct" /></div>
                         ) : (
-                            <div className="flex justify-between items-center"><span className="text-xs text-gray-400">Cadencia</span><span className="text-lg font-mono font-bold text-orange-300">{Math.round(recentRuns[0]?.avgCadence || 0)} <span className="text-[9px] text-gray-500 font-sans font-normal">spm</span></span></div>
+                            <div className="flex justify-between items-center"><span className="text-xs text-gray-400">Cadencia</span><span className="text-lg font-mono font-bold text-orange-300">{formatMetric(recentRuns[0]?.avgCadence || 0)} <span className="text-[9px] text-gray-500 font-sans font-normal">spm</span></span></div>
                         )}
                     </div>
                 )}
@@ -326,7 +328,7 @@ export const TrendAnalysis = memo(({ sessions, profile }: { sessions: Session[],
                                             {metricsConfig[key].label}
                                         </span>
                                         <span className="font-mono font-bold text-white ml-3">
-                                            {val} <span className="text-gray-600 font-normal">{metricsConfig[key].unit}</span>
+                                            {formatMetric(val)} <span className="text-gray-600 font-normal">{metricsConfig[key].unit}</span>
                                         </span>
                                     </div>
                                 );
@@ -560,8 +562,8 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
                  
                  // Click en ruta → info
                  poly.on('click', () => {
-                     const distKm = (s.distance / 1000).toFixed(1);
-                     const elevM = Math.round(s.totalElevationGain) || 0;
+                     const distKm = formatMetric(s.distance / 1000, 2);
+                     const elevM = formatMetric(s.totalElevationGain);
                      const name = s.name || 'Sin nombre';
                      const date = new Date(s.startTime).toLocaleDateString('es-ES');
                      poly.bindPopup(`
@@ -857,9 +859,9 @@ export const FitnessTrendChart = ({ sessions }: { sessions: Session[] }) => {
                         style={{ left: `${(hoverIndex/days)*100}%`, transform: 'translateX(-50%)' }}
                     >
                         <p className="font-bold text-gray-300 border-b border-white/10 pb-1 mb-1">{dailyData[hoverIndex].date}</p>
-                        <p className="text-blue-400">Fitness: {dailyData[hoverIndex].ctl}</p>
-                        <p className="text-pink-400">Fatiga: {dailyData[hoverIndex].atl}</p>
-                        <p className={dailyData[hoverIndex].tsb >= 0 ? 'text-green-400' : 'text-red-400'}>Forma: {dailyData[hoverIndex].tsb}</p>
+                        <p className="text-blue-400">Fitness: {formatMetric(dailyData[hoverIndex].ctl)}</p>
+                        <p className="text-pink-400">Fatiga: {formatMetric(dailyData[hoverIndex].atl)}</p>
+                        <p className={dailyData[hoverIndex].tsb >= 0 ? 'text-green-400' : 'text-red-400'}>Forma: {formatMetric(dailyData[hoverIndex].tsb)}</p>
                     </div>
                  )}
 
@@ -899,7 +901,7 @@ export const RacePredictor = ({ sessions, onShowInfo }: { sessions: Session[], o
         <div className="glass-panel p-5 rounded-3xl col-span-2 md:col-span-4">
              <div className="flex justify-between items-center mb-4">
                  <h4 className="text-sm font-semibold text-gray-400 flex items-center"><Icons.Flag /> <span className="ml-2">Predicción de Carrera</span></h4>
-                 <div className="text-[10px] text-gray-500 bg-white/5 px-2 py-1 rounded">Basado en tu mejor {Math.round(bestRun.distance/1000)}k (Fatiga k={(k-1).toFixed(3)})</div>
+                 <div className="text-[10px] text-gray-500 bg-white/5 px-2 py-1 rounded">Basado en tu mejor {formatMetric(bestRun.distance/1000)}k (Fatiga k={(k-1).toFixed(3)})</div>
              </div>
              <div className="grid grid-cols-4 gap-2">
                  {[{d: 5000, l: '5K'}, {d: 10000, l: '10K'}, {d: 21097, l: 'Media'}, {d: 42195, l: 'Maratón'}].map(item => {
@@ -958,7 +960,7 @@ export const WeeklyVolumeChart = ({ sessions }: { sessions: Session[] }) => {
             <div className="h-40 w-full relative cursor-crosshair">
                 {/* Ejes Y */}
                 <div className="absolute left-0 top-0 bottom-0 flex flex-col justify-between text-[9px] text-[#34C759] font-mono pointer-events-none z-0">
-                    <span>{Math.round(maxDist)}km</span>
+                    <span>{formatMetric(maxDist)}km</span>
                     <span>0km</span>
                 </div>
                 <div className="absolute right-0 top-0 bottom-0 flex flex-col justify-between text-[9px] text-[#007AFF] font-mono pointer-events-none z-0">
@@ -997,7 +999,7 @@ export const WeeklyVolumeChart = ({ sessions }: { sessions: Session[] }) => {
                     style={{ left: hoverData.x, top: hoverData.y - 50, transform: 'translateX(-50%)' }}
                 >
                     <p className="font-bold text-gray-400 mb-1 border-b border-white/10 pb-1">Semana {hoverData.label}</p>
-                    <p className="text-[#34C759] font-mono">{hoverData.dist.toFixed(1)} km</p>
+                    <p className="text-[#34C759] font-mono">{formatMetric(hoverData.dist)} km</p>
                     <p className="text-[#007AFF] font-mono">{hoverData.dur.toFixed(1)} h</p>
                 </div>,
                 document.body
@@ -1014,9 +1016,9 @@ export const AggregatedStats = ({ sessions }: { sessions: Session[] }) => {
 
     return (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <MetricCard label="Total Distancia" value={totalDist.toFixed(1)} unit="km" colorClass="text-blue-400" icon={<Icons.Map />} />
+            <MetricCard label="Total Distancia" value={formatMetric(totalDist)} unit="km" colorClass="text-blue-400" icon={<Icons.Map />} />
             <MetricCard label="Total Tiempo" value={formatTime(totalTime)} unit="" colorClass="text-yellow-400" icon={<Icons.Clock />} />
-            <MetricCard label="Sesiones" value={totalSessions} unit="" colorClass="text-[#34C759]" icon={<Icons.ListCheck />} />
+            <MetricCard label="Sesiones" value={formatMetric(totalSessions)} unit="" colorClass="text-[#34C759]" icon={<Icons.ListCheck />} />
             <MetricCard label="Desnivel +" value={totalElev} unit="m" colorClass="text-purple-400" icon={<Icons.Mountain />} />
         </div>
     );
@@ -1038,7 +1040,7 @@ export const RecentActivitiesList = ({ sessions, onSelectSession }: { sessions: 
                                 <p className="text-[10px] text-gray-500">{new Date(s.startTime).toLocaleDateString()} • {formatTime(s.duration)}</p>
                             </div>
                             <div className="text-right">
-                                <p className="text-xs font-mono font-bold text-[#34C759]">{(s.distance/1000).toFixed(2)} km</p>
+                                <p className="text-xs font-mono font-bold text-[#34C759]">{formatMetric(s.distance/1000, 2)} km</p>
                             </div>
                         </div>
                     );
@@ -1142,8 +1144,8 @@ export const ElevationChart = ({ trackPoints, currentIndex }: { trackPoints: Tra
                 <path d={`M${points}`} fill="none" stroke="#34C759" strokeWidth="1.5" vectorEffect="non-scaling-stroke" />
             </svg>
             <div className="absolute top-0 bottom-0 w-px bg-white shadow-[0_0_10px_rgba(255,255,255,0.8)]" style={{ left: `${currentX}%` }}></div>
-            <div className="absolute top-2 right-2 text-[10px] text-gray-500 bg-black/50 px-1 rounded font-mono">{Math.round(maxAlt)}m</div>
-            <div className="absolute bottom-2 right-2 text-[10px] text-gray-500 bg-black/50 px-1 rounded font-mono">{Math.round(minAlt)}m</div>
+            <div className="absolute top-2 right-2 text-[10px] text-gray-500 bg-black/50 px-1 rounded font-mono">{formatMetric(maxAlt)}m</div>
+            <div className="absolute bottom-2 right-2 text-[10px] text-gray-500 bg-black/50 px-1 rounded font-mono">{formatMetric(minAlt)}m</div>
         </div>
     );
 };

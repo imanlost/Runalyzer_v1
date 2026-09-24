@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Icons } from './icons';
 import { UserProfile, Notification, Session } from './types';
-import { isSameDay, getMonthName, FOSTER_SCALE } from './utils';
+import { isSameDay, getMonthName, FOSTER_SCALE, formatMetric } from './utils';
 
 const TOOLTIP_CONTENT: Record<string, { title: string; content: string }> = {
     vam: {
@@ -180,7 +180,7 @@ export const NotificationToast: React.FC<{ notification: Notification, onClose: 
 export const SummaryItem = ({ label, value, unit, color }: any) => (
     <div className="bg-white/5 p-3 rounded-xl border border-white/5 flex flex-col justify-center">
         <p className="text-[10px] text-gray-400 uppercase font-bold tracking-wider mb-1">{label}</p>
-        <p className={`text-xl font-bold font-mono ${color || 'text-white'}`}>{value} <span className="text-[10px] text-gray-500 font-sans font-normal ml-0.5">{unit}</span></p>
+        <p className={`text-xl font-bold font-mono ${color || 'text-white'}`}>{typeof value === 'number' ? formatMetric(value) : value} <span className="text-[10px] text-gray-500 font-sans font-normal ml-0.5">{unit}</span></p>
     </div>
 );
 
@@ -188,7 +188,7 @@ export const MetricCard = ({ label, value, unit, colorClass, icon }: any) => (
     <div className="glass-panel p-3 rounded-2xl flex items-center justify-between">
         <div>
             <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">{label}</p>
-            <p className={`text-2xl font-bold font-mono ${colorClass}`}>{value} <span className="text-xs text-gray-500 ml-1">{unit}</span></p>
+            <p className={`text-2xl font-bold font-mono ${colorClass}`}>{typeof value === 'number' ? formatMetric(value) : value} <span className="text-xs text-gray-500 ml-1">{unit}</span></p>
         </div>
         <div className={`text-2xl opacity-20 ${colorClass}`}>{icon}</div>
     </div>

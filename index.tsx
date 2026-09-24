@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Session, SessionSummary, UserProfile, Notification } from './types';
 import { Icons, getSportConfig } from './icons';
-import { isSameDay, getMonthName, calculateTRIMP, calculateACSMVo2, calculateClimbScore, generateMockHistory, formatTime, formatPace, calculateAverageStrideLength, getWindDirectionLabel, fetchWeatherForSession } from './utils';
+import { isSameDay, getMonthName, calculateTRIMP, calculateACSMVo2, calculateClimbScore, generateMockHistory, formatTime, formatPace, formatMetric, calculateAverageStrideLength, getWindDirectionLabel, fetchWeatherForSession } from './utils';
 import { getAllSessionSummaries, getFullSessionFromDB, saveSessionToDB, deleteSessionFromDB, clearDB } from './db';
 import { parseCsv, parseFitData, parsePolarJson } from './parsers';
 import { importFromIntervals } from './intervals';
@@ -173,7 +173,7 @@ const Sidebar = ({ sessions, view, setView, selectedSessionId, handleSelectSessi
                                                         )}
                                                         <div className="flex-1 min-w-0">
                                                             <p className={`text-xs font-medium truncate ${isActive ? 'text-white' : 'text-gray-300'}`}>{session.name}</p>
-                                                            <p className="text-[10px] text-gray-500 font-mono">{(session.distance/1000).toFixed(2)}km • {formatTime(session.duration)}</p>
+                                                            <p className="text-[10px] text-gray-500 font-mono">{formatMetric(session.distance/1000, 2)}km • {formatTime(session.duration)}</p>
                                                         </div>
                                                         {!isSelectionMode && (
                                                             <button onClick={(e) => deleteSession(e, session.id)} className="ml-2 opacity-0 group-hover:opacity-100 hover:text-red-500 text-gray-600 transition-opacity"><Icons.Trash /></button>
@@ -552,13 +552,13 @@ const App = () => {
                 <div className="glass-panel p-4 rounded-3xl mt-4">
                      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
                         <SummaryItem label="Tiempo" value={formatTime(currentSession.duration)} unit="" />
-                        <SummaryItem label="Distancia" value={(currentSession.distance/1000).toFixed(2)} unit="km" />
+                        <SummaryItem label="Distancia" value={formatMetric(currentSession.distance/1000, 2)} unit="km" />
                         <SummaryItem label="Ritmo" value={formatPace((1000/(currentSession.distance/currentSession.duration))/60)} unit="/km" />
-                        <SummaryItem label="FC Media" value={Math.round(currentSession.avgHr)} unit="bpm" />
-                        <SummaryItem label="Calorías" value={Math.round(currentSession.calories)} unit="kcal" />
-                        <SummaryItem label="Desnivel +" value={Math.round(currentSession.totalElevationGain)} unit="m" />
-                        <SummaryItem label="Carga" value={currentSession.trimp || '-'} unit="TRIMP" color="text-purple-400" />
-                        <SummaryItem label="Climb Score" value={currentSession.climbScore || '-'} unit="" color="text-yellow-400" />
+                        <SummaryItem label="FC Media" value={formatMetric(currentSession.avgHr)} unit="bpm" />
+                        <SummaryItem label="Calorías" value={formatMetric(currentSession.calories)} unit="kcal" />
+                        <SummaryItem label="Desnivel +" value={formatMetric(currentSession.totalElevationGain)} unit="m" />
+                        <SummaryItem label="Carga" value={formatMetric(currentSession.trimp)} unit="TRIMP" color="text-purple-400" />
+                        <SummaryItem label="Climb Score" value={formatMetric(currentSession.climbScore)} unit="" color="text-yellow-400" />
                      </div>
                 </div>
                 {currentSession.weather && (
@@ -605,7 +605,7 @@ const App = () => {
                         <div className="absolute top-4 left-4 right-4 flex justify-between pointer-events-none">
                             <div className="bg-black/60 backdrop-blur-md rounded-xl p-3 flex space-x-6 text-white border border-white/5">
                                 <div><p className="text-[10px] text-gray-400 uppercase font-bold">Tiempo Actual</p><p className="font-mono text-xl">{formatTime(trackPoint ? (new Date(trackPoint.timestamp).getTime() - new Date(currentSession.startTime).getTime())/1000 : 0)}</p></div>
-                                <div><p className="text-[10px] text-gray-400 uppercase font-bold">Distancia</p><p className="font-mono text-xl">{trackPoint ? (trackPoint.dist / 1000).toFixed(2) : '0.00'} <span className="text-xs text-gray-500">km</span></p></div>
+                                <div><p className="text-[10px] text-gray-400 uppercase font-bold">Distancia</p><p className="font-mono text-xl">{formatMetric(trackPoint ? trackPoint.dist / 1000 : 0, 2)} <span className="text-xs text-gray-500">km</span></p></div>
                             </div>
                         </div>
                     </div>
@@ -622,7 +622,7 @@ const App = () => {
                              <ZoneDistributionChart trackPoints={currentSession.trackPoints} maxHr={userProfile.maxHr} restHr={userProfile.restHr} customZones={userProfile.customZones} />
                         </div>
                         <div className="grid grid-cols-2 gap-4 h-24">
-                             <MetricCard label="Frecuencia" value={trackPoint?.hr || '--'} unit="bpm" colorClass="text-rose-500" icon={<Icons.Heart />} />
+                             <MetricCard label="Frecuencia" value={formatMetric(trackPoint?.hr || 0)} unit="bpm" colorClass="text-rose-500" icon={<Icons.Heart />} />
                              <MetricCard label="Ritmo" value={trackPoint?.speed ? formatPace((1000/trackPoint.speed)/60 * 3.6) : '--'} unit="/km" colorClass="text-green-500" icon={<Icons.Run />} />
                         </div>
                     </div>
