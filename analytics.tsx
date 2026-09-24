@@ -1012,6 +1012,9 @@ export const AggregatedStats = ({ sessions }: { sessions: Session[] }) => {
     const totalDist = sessions.reduce((a,b) => a + b.distance, 0) / 1000;
     const totalTime = sessions.reduce((a,b) => a + b.duration, 0);
     const totalSessions = sessions.length;
+    // El total de desnivel acumula TODAS las sesiones de la base de datos, sin ningún filtro.
+    // Es, por tanto, un total histórico: si en el futuro se añade un filtro por fechas,
+    // hay que recalcularlo sobre el subconjunto filtrado en lugar de reutilizar este valor.
     const totalElev = sessions.reduce((a,b) => a + b.totalElevationGain, 0);
 
     return (
@@ -1019,7 +1022,7 @@ export const AggregatedStats = ({ sessions }: { sessions: Session[] }) => {
             <MetricCard label="Total Distancia" value={formatMetric(totalDist)} unit="km" colorClass="text-blue-400" icon={<Icons.Map />} />
             <MetricCard label="Total Tiempo" value={formatTime(totalTime)} unit="" colorClass="text-yellow-400" icon={<Icons.Clock />} />
             <MetricCard label="Sesiones" value={formatMetric(totalSessions)} unit="" colorClass="text-[#34C759]" icon={<Icons.ListCheck />} />
-            <MetricCard label="Desnivel +" value={totalElev} unit="m" colorClass="text-purple-400" icon={<Icons.Mountain />} />
+            <MetricCard label="Desnivel +" value={formatMetric(totalElev)} unit="m" colorClass="text-purple-400" icon={<Icons.Mountain />} />
         </div>
     );
 };
