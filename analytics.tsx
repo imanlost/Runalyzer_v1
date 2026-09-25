@@ -5,7 +5,9 @@ import { Session, UserProfile, TrackPoint, DailyFitness } from './types';
 import { Icons, getSportConfig } from './icons';
 import { InfoTooltip, MetricCard } from './components';
 import { calculateGlobalVo2Max, formatPace, formatTime, formatMetric, calculateIndividualizedK, calculateACWR, getWeekStartMonday, smoothAltitudes, getMonthName, calculateEfficiencyFactor, estimateVentilatoryThresholds, estimatePower } from './utils';
-import { getAllSessionsFromDB, getFullSessionFromDB } from './db'; 
+import { getAllSessionsFromDB, getFullSessionFromDB } from './db';
+import { BASEMAPS, BASEMAP_KEYS, BASEMAP_OPACITY } from './basemaps';
+import type { BasemapKey } from './basemaps';
 
 // --- COMPONENTES AUXILIARES PARA ANALYTICS ---
 
@@ -524,12 +526,54 @@ export const IntensityDistribution = ({ sessions, profile, onShowInfo }: { sessi
     );
 };
 
+// --- MAPA BASE (capas sin clave de API; ver basemaps.ts) ---
+
+/**
+ * Aplica la capa base al mapa. Si ya había una, la retira: recrear la capa es
+ * más seguro que cambiarle la URL en caliente, porque `maxNativeZoom` se
+ * resuelve al crearla y de otro modo el zoom quedaría desfasado.
+ */
+const applyBasemap = (map: L.Map, layer: L.TileLayer | null, key: BasemapKey): L.TileLayer => {
+    if (layer) map.removeLayer(layer);
+    const cfg = BASEMAPS[key];
+    return L.tileLayer(cfg.url, {
+        opacity: BASEMAP_OPACITY,
+        maxZoom: 19,
+        maxNativeZoom: cfg.maxNativeZoom,
+    }).addTo(map);
+};
+
+/** Selector de capa base; se coloca sobre el mapa, abajo a la izquierda. */
+const BasemapSelector = ({ value, onChange }: { value: BasemapKey; onChange: (k: BasemapKey) => void }) => (
+    <div className="absolute left-4 bottom-4 z-[1000] flex gap-1 rounded-full bg-black/70 border border-white/15 p-1">
+        {BASEMAP_KEYS.map(k => (
+            <button
+                key={k}
+                onClick={() => onChange(k)}
+                className={`px-3 py-1 rounded-full text-[11px] font-bold transition-colors ${value === k ? 'bg-[#34C759] text-black' : 'text-gray-400 hover:text-white'}`}
+            >
+                {BASEMAPS[k].label}
+            </button>
+        ))}
+    </div>
+);
+
+/** Crédito del proveedor: obligatorio en las dos capas gratuitas. */
+const BasemapAttribution = ({ value }: { value: BasemapKey }) => (
+    <div className="absolute right-1 bottom-0 z-[1000] px-1 text-[9px] text-gray-500 pointer-events-none">
+        {BASEMAPS[value].attribution}
+    </div>
+);
+
 export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
     const mapRef = useRef<HTMLDivElement>(null);
     const leafletMap = useRef<L.Map | null>(null);
+    const tileRef = useRef<L.TileLayer | null>(null);
+    const basemapRef = useRef<BasemapKey>('oscuro');
     const polyRefs = useRef<Map<string, L.Polyline>>(new Map());
     const [fullData, setFullData] = useState<Session[]>([]);
     const [loading, setLoading] = useState(false);
+    const [basemap, setBasemap] = useState<BasemapKey>('oscuro');
     
     // Filtros
     const [showFilters, setShowFilters] = useState(false);
@@ -574,7 +618,7 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
         
         if (!leafletMap.current) {
             leafletMap.current = L.map(mapRef.current, { zoomControl: false, attributionControl: false }).setView([40.4168, -3.7038], 5);
-             L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { opacity: 0.8 }).addTo(leafletMap.current);
+            tileRef.current = applyBasemap(leafletMap.current, null, basemapRef.current);
         }
 
         const map = leafletMap.current;
@@ -640,9 +684,16 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
              if (leafletMap.current) {
                  leafletMap.current.remove();
                  leafletMap.current = null;
+                 tileRef.current = null;
              }
         }
     }, [fullData, sessions, activeFilter, filteredSessions]);
+
+    // Cambio de capa base pedido por el usuario (no recrea el mapa)
+    useEffect(() => {
+        basemapRef.current = basemap;
+        if (leafletMap.current) tileRef.current = applyBasemap(leafletMap.current, tileRef.current, basemap);
+    }, [basemap]);
 
     const matchedCount = filteredSessions?.length || 0;
     const totalCount = (fullData.length > 0 ? fullData : sessions).filter(s => s.trackPoints && s.trackPoints.length > 0).length;
@@ -651,6 +702,8 @@ export const GlobalHeatmap = ({ sessions }: { sessions: Session[] }) => {
     return (
         <div className="col-span-4 h-[800px] rounded-3xl overflow-hidden relative group border border-white/5" style={{background: '#121214'}}>
             <div ref={mapRef} className="w-full h-full bg-[#1C1C1E]"></div>
+            <BasemapSelector value={basemap} onChange={setBasemap} />
+            <BasemapAttribution value={basemap} />
             <div style={{
                 position: 'absolute', top: '16px', left: '16px', zIndex: 1000,
                 background: '#000', padding: '4px 12px', borderRadius: '9999px',
@@ -1431,8 +1484,11 @@ export const RecentActivitiesList = ({ sessions, onSelectSession }: { sessions: 
 export const MapComponent = ({ trackPoints, currentIndex }: { trackPoints: TrackPoint[], currentIndex: number }) => {
     const mapRef = useRef<HTMLDivElement>(null);
     const leafletMap = useRef<L.Map | null>(null);
+    const tileRef = useRef<L.TileLayer | null>(null);
+    const basemapRef = useRef<BasemapKey>('oscuro');
     const polylineRef = useRef<L.Polyline | null>(null);
     const markerRef = useRef<L.CircleMarker | null>(null);
+    const [basemap, setBasemap] = useState<BasemapKey>('oscuro');
 
     useEffect(() => {
         if (!mapRef.current) return;
@@ -1440,7 +1496,7 @@ export const MapComponent = ({ trackPoints, currentIndex }: { trackPoints: Track
         // Init Map
         if (!leafletMap.current) {
             leafletMap.current = L.map(mapRef.current, { zoomControl: false, attributionControl: false }).setView([0, 0], 13);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { opacity: 0.8 }).addTo(leafletMap.current);
+            tileRef.current = applyBasemap(leafletMap.current, null, basemapRef.current);
         }
         
         const map = leafletMap.current;
@@ -1464,11 +1520,18 @@ export const MapComponent = ({ trackPoints, currentIndex }: { trackPoints: Track
              if (leafletMap.current) {
                  leafletMap.current.remove();
                  leafletMap.current = null;
+                 tileRef.current = null;
                  markerRef.current = null;
                  polylineRef.current = null;
              }
         }
     }, [trackPoints]); // Re-crear si cambian los puntos (cambio de sesión)
+
+    // Cambio de capa base pedido por el usuario (no recrea el mapa)
+    useEffect(() => {
+        basemapRef.current = basemap;
+        if (leafletMap.current) tileRef.current = applyBasemap(leafletMap.current, tileRef.current, basemap);
+    }, [basemap]);
 
     useEffect(() => {
         if (markerRef.current && leafletMap.current && trackPoints[currentIndex]) {
@@ -1477,7 +1540,13 @@ export const MapComponent = ({ trackPoints, currentIndex }: { trackPoints: Track
         }
     }, [currentIndex, trackPoints]);
 
-    return <div ref={mapRef} className="w-full h-full bg-[#1C1C1E]" />;
+    return (
+        <div className="relative w-full h-full">
+            <div ref={mapRef} className="w-full h-full bg-[#1C1C1E]" />
+            <BasemapSelector value={basemap} onChange={setBasemap} />
+            <BasemapAttribution value={basemap} />
+        </div>
+    );
 };
 
 export const ElevationChart = ({ trackPoints, currentIndex }: { trackPoints: TrackPoint[], currentIndex: number }) => {

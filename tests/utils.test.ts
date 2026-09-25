@@ -26,6 +26,7 @@ import {
     calculateACSMVo2,
 } from '../utils.ts';
 import type { ThresholdSession } from '../utils.ts';
+import { BASEMAPS, BASEMAP_KEYS } from '../basemaps.ts';
 
 // --- Utilidades de los tests ---
 
@@ -358,4 +359,43 @@ test('estimatePower mantiene la escala en llano y sube con la pendiente', () => 
     // Con el factor de Minetti a +5 % (1,301): 316,7 W → 317 W.
     assertClose(uphill, flat * 1.301443, 1e-3, 'potencia a +5 %');
     assert.equal(formatMetric(uphill), '317');
+});
+
+// --- MAPA BASE: capas sin clave de API ---
+//
+// La app usaba los mapas ráster de CARTO, que desde finales de agosto de 2026
+// exigen clave y estampan «API KEY REQUIRED» en cada tesela servida sin ella.
+// Estos tests fijan el contrato de las capas sustitutas: nada de claves ni de
+// subdominios, plantilla válida para Leaflet y atribución presente.
+
+test('las capas base no requieren clave de API', () => {
+    assert.equal(BASEMAP_KEYS.length, 2, 'deben quedar dos capas: oscura y topo del IGN');
+    for (const key of BASEMAP_KEYS) {
+        const { url, attribution, maxNativeZoom } = BASEMAPS[key];
+        assert.ok(
+            !/cartocdn|key=|apikey|token/i.test(url),
+            `${key}: la URL parece necesitar clave de API: ${url}`
+        );
+        assert.ok(!url.includes('{s}'), `${key}: ya no se usan subdominios {s}`);
+        assert.ok(
+            url.includes('{z}') && url.includes('{x}') && url.includes('{y}'),
+            `${key}: faltan marcadores {z}/{x}/{y} en la plantilla`
+        );
+        assert.ok(attribution.trim().length > 5, `${key}: falta la atribución del proveedor`);
+        assert.ok(
+            maxNativeZoom >= 13 && maxNativeZoom <= 20,
+            `${key}: zoom nativo fuera de rango: ${maxNativeZoom}`
+        );
+    }
+});
+
+test('cada capa declara las teselas en el orden que espera su servicio', () => {
+    // Esri pide /{z}/{y}/{x}; el WMTS del IGN pide TILEROW={y} y TILECOL={x}.
+    // Intercambiarlos da un mapa equivocado sin ningún error visible.
+    const esri = BASEMAPS.oscuro.url;
+    assert.ok(esri.indexOf('{z}') < esri.indexOf('{y}') && esri.indexOf('{y}') < esri.indexOf('{x}'),
+        `Esri espera /{z}/{y}/{x}: ${esri}`);
+    const ign = BASEMAPS.ign.url;
+    assert.ok(ign.includes('TILEMATRIX={z}') && ign.includes('TILEROW={y}') && ign.includes('TILECOL={x}'),
+        `el WMTS del IGN necesita TILEMATRIX/TILEROW/TILECOL: ${ign}`);
 });
